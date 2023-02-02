@@ -1,6 +1,6 @@
 import m, { Component, Vnode } from "mithril"
 import { lang } from "../../../common/misc/LanguageViewModel"
-import { TitleSection } from "../../../common/gui/TitleSection"
+import { TitleSection } from "../../../common/gui/base/TitleSection"
 import { Icons } from "../../../common/gui/base/icons/Icons"
 import { theme } from "../../../common/gui/theme"
 import { Card } from "../../../common/gui/base/Card"

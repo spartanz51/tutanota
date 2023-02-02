@@ -1,6 +1,6 @@
 import m, { Component, Vnode } from "mithril"
 import { lang } from "../../../misc/LanguageViewModel"
-import { TitleSection } from "../../../gui/TitleSection"
+import { TitleSection } from "../../../gui/base/TitleSection"
 import { Icons } from "../../../gui/base/icons/Icons"
 import { PrimaryButton } from "../../../gui/base/buttons/VariantButtons.js"
 import { theme } from "../../../gui/theme"

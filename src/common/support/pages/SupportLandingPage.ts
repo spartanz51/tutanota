@@ -6,7 +6,7 @@ import { Thunk } from "@tutao/utils"
 import { AllIcons, progressIcon } from "../../gui/base/Icon.js"
 import { Icons } from "../../gui/base/icons/Icons.js"
 import { theme } from "../../gui/theme.js"
-import { TitleSection } from "../../gui/TitleSection"
+import { TitleSection } from "../../gui/base/TitleSection"
 import { windowFacade } from "../../misc/WindowFacade"
 
 type Props = {

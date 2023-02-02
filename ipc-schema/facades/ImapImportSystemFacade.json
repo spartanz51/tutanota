@@ -1,0 +1,39 @@
+{
+	"name": "ImapImportSystemFacade",
+	"type": "facade",
+	"senders": ["web"],
+	"receivers": ["desktop"],
+	"doc": "Facade implemented by the native desktop client starting and stopping an IMAP import.",
+	"methods": {
+		"startImport": {
+			"doc": "Start the IMAP import for a specific account.",
+			"arg": [
+				{
+					"accountSyncId": "IdTuple"
+				},
+				{
+					"imapSyncState": "ImapSyncState"
+				}
+			],
+			"ret": "ImapError?"
+		},
+		"getImapMailboxesFromServer": {
+			"doc": "Fetches the folders from the IMAP server, to be used for the folder mapping step",
+			"arg": [
+				{
+					"imapAccount": "ImapAccount"
+				}
+			],
+			"ret": "ImapGetMailboxResult"
+		},
+		"stopImport": {
+			"doc": "Stop a specific running IMAP import.",
+			"arg": [
+				{
+					"accountSyncId": "IdTuple"
+				}
+			],
+			"ret": "void"
+		}
+	}
+}

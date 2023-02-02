@@ -1,6 +1,6 @@
 import m, { Children, Vnode, VnodeDOM } from "mithril"
 import stream from "mithril/stream"
-import { assertMainOrNode, GroupType, isApp, isDesktop, isIOSApp } from "@tutao/app-env"
+import { assertMainOrNode, FeatureType, GroupType, isApp, isDesktop, isIOSApp } from "@tutao/app-env"
 import { ColumnType, ViewColumn } from "../../common/gui/base/ViewColumn"
 import { ViewSlider } from "../../common/gui/nav/ViewSlider.js"
 import { SettingsFolder } from "../../common/settings/SettingsFolder.js"
@@ -16,7 +16,6 @@ import { GroupListView } from "./groups/GroupListView.js"
 import { WhitelabelSettingsViewer } from "../../common/settings/whitelabel/WhitelabelSettingsViewer"
 import { Icons } from "../../common/gui/base/icons/Icons"
 import { theme } from "../../common/gui/theme"
-import { FeatureType } from "@tutao/app-env"
 import { locator } from "../../common/api/main/CommonLocator"
 import { SubscriptionViewer } from "../../common/subscription/SubscriptionViewer"
 import { PaymentViewer } from "../../common/subscription/PaymentViewer"
@@ -75,6 +74,9 @@ import { ButtonType } from "../../common/gui/base/Button"
 import { CancelledError } from "../../common/api/common/error/CancelledError"
 import { GroupNameData } from "../../common/sharing/model/GroupSettingsModel"
 import { GroupSettingNameInputFields } from "../../common/sharing/view/GroupSettingNameInputFields"
+import ImapImportSettingsViewer from "./imapimport/ImapImportSettingsViewer"
+import { AffiliateViewModel } from "../../common/settings/AffiliateViewModel"
+import { ImapImportController } from "../native/main/ImapImportController"
 
 assertMainOrNode()
 
@@ -191,6 +193,22 @@ export class SettingsView extends BaseTopLevelView implements TopLevelView<Setti
 					() => {
 						if (isDesktop()) {
 							return new DesktopMailImportSettingsViewer(() => mailLocator.getMailImporter())
+						} else {
+							return new WebMailImportSettingsViewer()
+						}
+					},
+					undefined,
+				),
+			)
+
+			this._userFolders.push(
+				new SettingsFolder(
+					() => "imapImportSettings_label",
+					() => Icons.Sync,
+					"imapImportImport",
+					() => {
+						if (isDesktop()) {
+							return new ImapImportSettingsViewer()
 						} else {
 							return new WebMailImportSettingsViewer()
 						}

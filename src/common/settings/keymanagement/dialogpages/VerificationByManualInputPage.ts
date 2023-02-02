@@ -11,7 +11,7 @@ import { Icon, IconSize } from "../../../gui/base/Icon"
 import { theme } from "../../../gui/theme"
 import { debounce } from "@tutao/utils"
 import { getCleanedMailAddress } from "../../../misc/parsing/MailAddressParser"
-import { TitleSection } from "../../../gui/TitleSection"
+import { TitleSection } from "../../../gui/base/TitleSection"
 import { FingerprintRow } from "../FingerprintRow"
 import { IdentityKeyVerificationMethod } from "@tutao/app-env"
 

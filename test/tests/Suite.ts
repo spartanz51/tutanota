@@ -10,6 +10,7 @@ import "./typerefs/EntityFunctionsTest.js"
 import "./api/common/utils/FileUtilsTest.js"
 import "./api/common/utils/LoggerTest.js"
 import "./api/common/utils/PlainTextSearchTest.js"
+import "./api/common/utils/imapImportUtils/ImapImportUtilsTest.js"
 import "./api/main/EntropyCollectorTest.js"
 import "./api/main/SyncTrackerTest.js"
 import "./instance-pipeline/CompressionTest.js"
@@ -289,6 +290,8 @@ async function setupSuite({ integration }: { integration?: boolean }) {
 		await import("./desktop/db/OfflineDbFacadeTest.js")
 		await import("./desktop/export/DesktopExportFacadeTest.js")
 		await import("./desktop/files/DesktopFileFacadeTest.js")
+		await import("./desktop/imapimport/adsync/imapmail/ImapMailRFC822ParserTest.js")
+		await import("./desktop/imapimport/adsync/imapmail/ImapImportUtilsTest.js")
 		await import("./desktop/files/TempFsTest.js")
 		await import("./desktop/files/TempFsTest.js")
 		await import("./desktop/integration/DesktopIntegratorTest.js")

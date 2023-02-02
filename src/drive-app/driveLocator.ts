@@ -120,6 +120,7 @@ import type { CalendarEventPreviewViewModel } from "../calendar-app/calendar/gui
 import { FolderItem } from "./drive/view/DriveUtils"
 import { MoveItems } from "./drive/view/DriveMoveItemDialog"
 import { DriveFilePicker } from "./drive/view/DriveFilePicker"
+import type { ImapImportFacade } from "../common/native/common/generatedipc/ImapImportFacade"
 
 assertMainOrNode()
 
@@ -180,6 +181,7 @@ class DriveLocator implements CommonLocator {
 	whitelabelThemeGenerator!: WhitelabelThemeGenerator
 	driveFacade!: DriveFacade
 	transferProgressDispatcher!: TransferProgressDispatcher
+	imapImporter!: ImapImportFacade
 
 	private nativeInterfaces: NativeInterfaces | null = null
 	private entropyFacade!: EntropyFacade
@@ -644,10 +646,13 @@ class DriveLocator implements CommonLocator {
 
 			this.transferProgressDispatcher = new TransferProgressDispatcher()
 
+			// FIXME
+			this.imapImporter = {} as ImapImportFacade
 			this.webMobileFacade = new WebMobileFacade(this.connectivityModel, CALENDAR_PREFIX)
 			this.nativeInterfaces = createNativeInterfaces(
 				this.webMobileFacade,
 				new WebDesktopFacade(this.logins, async () => this.native),
+				this.imapImporter,
 				new WebInterWindowEventFacade(this.logins, windowFacade, deviceConfig),
 				new WebCommonNativeFacade(
 					this.logins,

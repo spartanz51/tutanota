@@ -1,0 +1,87 @@
+{
+	"name": "ImapImportFacade",
+	"type": "facade",
+	"senders": ["desktop"],
+	"receivers": ["web"],
+	"doc": "Facade implemented by the web worker, receiving IMAP import events.",
+	"methods": {
+		"onMailbox": {
+			"doc": "onMailbox IMAP import event.",
+			"arg": [
+				{
+					"accountSyncId": "IdTuple"
+				},
+				{
+					"imapMailbox": "ImapMailbox"
+				},
+				{
+					"eventType": "AdSyncEventType"
+				}
+			],
+			"ret": "void"
+		},
+		"onMailboxStatus": {
+			"doc": "onMailboxStatus IMAP import event.",
+			"arg": [
+				{
+					"accountSyncId": "IdTuple"
+				},
+				{
+					"imapMailboxStatus": "ImapMailboxStatus"
+				}
+			],
+			"ret": "void"
+		},
+		"onMultipleMails": {
+			"doc": "onMultipleMails IMAP import event.",
+			"arg": [
+				{
+					"accountSyncId": "IdTuple"
+				},
+				{
+					"imapMails": "List<ImapMail>"
+				},
+				{
+					"eventType": "AdSyncEventType"
+				}
+			],
+			"ret": "void"
+		},
+		"onPostpone": {
+			"doc": "onPostpone IMAP import event.",
+			"arg": [
+				{
+					"accountSyncId": "IdTuple"
+				},
+				{
+					"postponedUntil": "number"
+				}
+			],
+			"ret": "void"
+		},
+		"onFinish": {
+			"doc": "onFinish IMAP import event.",
+			"arg": [
+				{
+					"accountSyncId": "IdTuple"
+				},
+				{
+					"downloadedQuota": "number"
+				}
+			],
+			"ret": "void"
+		},
+		"onError": {
+			"doc": "onError IMAP import event.",
+			"arg": [
+				{
+					"accountSyncId": "IdTuple"
+				},
+				{
+					"imapError": "ImapError"
+				}
+			],
+			"ret": "void"
+		}
+	}
+}

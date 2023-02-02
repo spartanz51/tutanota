@@ -41,6 +41,12 @@ import { NativeMailImportFacadeSendDispatcher } from "../common/generatedipc/Nat
 import { NativeMailImportFacade } from "../common/generatedipc/NativeMailImportFacade"
 import { ExportFacade } from "../common/generatedipc/ExportFacade.js"
 import { isBrowser, isDesktop, Mode } from "@tutao/app-env"
+import { ImapImportFacade } from "../common/generatedipc/ImapImportFacade.js"
+import { ImapImportSystemFacade } from "../common/generatedipc/ImapImportSystemFacade"
+import { ImapImportSystemFacadeSendDispatcher } from "../common/generatedipc/ImapImportSystemFacadeSendDispatcher"
+import { DesktopOauthWindowFacade } from "../../desktop/DesktopOauthWindowFacade"
+import { OauthFacade } from "../common/generatedipc/OauthFacade"
+import { OauthFacadeSendDispatcher } from "../common/generatedipc/OauthFacadeSendDispatcher"
 
 export type NativeInterfaces = {
 	native: NativeInterfaceMain
@@ -53,6 +59,7 @@ export type NativeInterfaces = {
 	nativeCredentialsFacade: NativeCredentialsFacade
 	mobilePaymentsFacade: MobilePaymentsFacade
 	externalCalendarFacade: ExternalCalendarFacade
+	imapImportFacade: ImapImportFacade
 }
 
 export type DesktopInterfaces = {
@@ -62,6 +69,8 @@ export type DesktopInterfaces = {
 	nativeMailImportFacade: NativeMailImportFacade
 	interWindowEventSender: InterWindowEventFacadeSendDispatcher
 	exportFacade: ExportFacade
+	desktopImapImportFacade: ImapImportSystemFacade
+	desktopOauthWindowFacade: OauthFacade
 }
 
 /**
@@ -71,6 +80,7 @@ export type DesktopInterfaces = {
 export function createNativeInterfaces(
 	mobileFacade: WebMobileFacade,
 	desktopFacade: DesktopFacade,
+	imapImportFacade: ImapImportFacade,
 	interWindowEventFacade: InterWindowEventFacade,
 	commonNativeFacade: CommonNativeFacade,
 	cryptoFacade: CryptoFacade,
@@ -83,7 +93,7 @@ export function createNativeInterfaces(
 		throw new ProgrammingError("Tried to make native interfaces in non-native")
 	}
 
-	const dispatcher = new WebGlobalDispatcher(commonNativeFacade, desktopFacade, interWindowEventFacade, mobileFacade)
+	const dispatcher = new WebGlobalDispatcher(commonNativeFacade, desktopFacade, imapImportFacade, interWindowEventFacade, mobileFacade)
 	const native = new NativeInterfaceMain(dispatcher)
 	const nativePushFacadeSendDispatcher = new NativePushFacadeSendDispatcher(native)
 	const pushService = new NativePushServiceApp(nativePushFacadeSendDispatcher, logins, cryptoFacade, entityClient, deviceConfig, calendarFacade, app)
@@ -107,6 +117,7 @@ export function createNativeInterfaces(
 		nativeCredentialsFacade,
 		mobilePaymentsFacade,
 		externalCalendarFacade,
+		imapImportFacade,
 	}
 }
 
@@ -121,5 +132,7 @@ export function createDesktopInterfaces(native: NativeInterfaceMain): DesktopInt
 		nativeMailImportFacade: new NativeMailImportFacadeSendDispatcher(native),
 		interWindowEventSender: new InterWindowEventFacadeSendDispatcher(native),
 		exportFacade: new ExportFacadeSendDispatcher(native),
+		desktopImapImportFacade: new ImapImportSystemFacadeSendDispatcher(native),
+		desktopOauthWindowFacade: new OauthFacadeSendDispatcher(native),
 	}
 }

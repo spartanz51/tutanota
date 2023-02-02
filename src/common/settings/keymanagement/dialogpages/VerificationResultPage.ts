@@ -1,7 +1,7 @@
 import m, { Children, Component, Vnode } from "mithril"
 import { lang } from "../../../misc/LanguageViewModel"
 import { KeyVerificationModel } from "../KeyVerificationModel"
-import { TitleSection } from "../../../gui/TitleSection"
+import { TitleSection } from "../../../gui/base/TitleSection"
 import { FingerprintRow } from "../FingerprintRow"
 import { Icons } from "../../../gui/base/icons/Icons"
 import { theme } from "../../../gui/theme"

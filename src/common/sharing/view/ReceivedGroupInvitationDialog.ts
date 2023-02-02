@@ -17,7 +17,7 @@ import { PrimaryButton } from "../../gui/base/buttons/VariantButtons.js"
 import { AlarmInterval } from "../../calendar/date/CalendarUtils.js"
 import { getMailAddressDisplayText } from "../../mailFunctionality/SharedMailUtils.js"
 import { serializeAlarmInterval } from "../../api/common/utils/CommonCalendarUtils.js"
-import { ColorPickerView } from "../../gui/base/colorPicker/ColorPickerView"
+import { LegacyColorPickerView } from "../../gui/base/colorPicker/LegacyColorPickerView"
 import * as restError from "@tutao/rest-client/error"
 
 export function showGroupInvitationDialog(invitation: sysTypeRefs.ReceivedGroupInvitation) {
@@ -148,7 +148,7 @@ function renderCalendarGroupInvitationFields(
 	let alarms = alarmsStream()
 	return [
 		m(".small.mt-16.mb-4", lang.get("color_label")),
-		m(ColorPickerView, {
+		m(LegacyColorPickerView, {
 			value: selectedColourValue(),
 			onselect: selectedColourValue,
 		}),

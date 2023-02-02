@@ -10,6 +10,8 @@ import { ExternalCalendarFacade } from "./ExternalCalendarFacade.js"
 import { ExternalCalendarFacadeReceiveDispatcher } from "./ExternalCalendarFacadeReceiveDispatcher.js"
 import { FileFacade } from "./FileFacade.js"
 import { FileFacadeReceiveDispatcher } from "./FileFacadeReceiveDispatcher.js"
+import { ImapImportSystemFacade } from "./ImapImportSystemFacade.js"
+import { ImapImportSystemFacadeReceiveDispatcher } from "./ImapImportSystemFacadeReceiveDispatcher.js"
 import { InterWindowEventFacade } from "./InterWindowEventFacade.js"
 import { InterWindowEventFacadeReceiveDispatcher } from "./InterWindowEventFacadeReceiveDispatcher.js"
 import { NativeCredentialsFacade } from "./NativeCredentialsFacade.js"
@@ -20,6 +22,8 @@ import { NativeMailImportFacade } from "./NativeMailImportFacade.js"
 import { NativeMailImportFacadeReceiveDispatcher } from "./NativeMailImportFacadeReceiveDispatcher.js"
 import { NativePushFacade } from "./NativePushFacade.js"
 import { NativePushFacadeReceiveDispatcher } from "./NativePushFacadeReceiveDispatcher.js"
+import { OauthFacade } from "./OauthFacade.js"
+import { OauthFacadeReceiveDispatcher } from "./OauthFacadeReceiveDispatcher.js"
 import { SearchTextInAppFacade } from "./SearchTextInAppFacade.js"
 import { SearchTextInAppFacadeReceiveDispatcher } from "./SearchTextInAppFacadeReceiveDispatcher.js"
 import { SettingsFacade } from "./SettingsFacade.js"
@@ -37,11 +41,13 @@ export class DesktopGlobalDispatcher {
 	private readonly exportFacade: ExportFacadeReceiveDispatcher
 	private readonly externalCalendarFacade: ExternalCalendarFacadeReceiveDispatcher
 	private readonly fileFacade: FileFacadeReceiveDispatcher
+	private readonly imapImportSystemFacade: ImapImportSystemFacadeReceiveDispatcher
 	private readonly interWindowEventFacade: InterWindowEventFacadeReceiveDispatcher
 	private readonly nativeCredentialsFacade: NativeCredentialsFacadeReceiveDispatcher
 	private readonly nativeCryptoFacade: NativeCryptoFacadeReceiveDispatcher
 	private readonly nativeMailImportFacade: NativeMailImportFacadeReceiveDispatcher
 	private readonly nativePushFacade: NativePushFacadeReceiveDispatcher
+	private readonly oauthFacade: OauthFacadeReceiveDispatcher
 	private readonly searchTextInAppFacade: SearchTextInAppFacadeReceiveDispatcher
 	private readonly settingsFacade: SettingsFacadeReceiveDispatcher
 	private readonly sqlCipherFacade: SqlCipherFacadeReceiveDispatcher
@@ -53,11 +59,13 @@ export class DesktopGlobalDispatcher {
 		exportFacade: ExportFacade,
 		externalCalendarFacade: ExternalCalendarFacade,
 		fileFacade: FileFacade,
+		imapImportSystemFacade: ImapImportSystemFacade,
 		interWindowEventFacade: InterWindowEventFacade,
 		nativeCredentialsFacade: NativeCredentialsFacade,
 		nativeCryptoFacade: NativeCryptoFacade,
 		nativeMailImportFacade: NativeMailImportFacade,
 		nativePushFacade: NativePushFacade,
+		oauthFacade: OauthFacade,
 		searchTextInAppFacade: SearchTextInAppFacade,
 		settingsFacade: SettingsFacade,
 		sqlCipherFacade: SqlCipherFacade,
@@ -69,11 +77,13 @@ export class DesktopGlobalDispatcher {
 		this.exportFacade = new ExportFacadeReceiveDispatcher(exportFacade)
 		this.externalCalendarFacade = new ExternalCalendarFacadeReceiveDispatcher(externalCalendarFacade)
 		this.fileFacade = new FileFacadeReceiveDispatcher(fileFacade)
+		this.imapImportSystemFacade = new ImapImportSystemFacadeReceiveDispatcher(imapImportSystemFacade)
 		this.interWindowEventFacade = new InterWindowEventFacadeReceiveDispatcher(interWindowEventFacade)
 		this.nativeCredentialsFacade = new NativeCredentialsFacadeReceiveDispatcher(nativeCredentialsFacade)
 		this.nativeCryptoFacade = new NativeCryptoFacadeReceiveDispatcher(nativeCryptoFacade)
 		this.nativeMailImportFacade = new NativeMailImportFacadeReceiveDispatcher(nativeMailImportFacade)
 		this.nativePushFacade = new NativePushFacadeReceiveDispatcher(nativePushFacade)
+		this.oauthFacade = new OauthFacadeReceiveDispatcher(oauthFacade)
 		this.searchTextInAppFacade = new SearchTextInAppFacadeReceiveDispatcher(searchTextInAppFacade)
 		this.settingsFacade = new SettingsFacadeReceiveDispatcher(settingsFacade)
 		this.sqlCipherFacade = new SqlCipherFacadeReceiveDispatcher(sqlCipherFacade)
@@ -93,6 +103,8 @@ export class DesktopGlobalDispatcher {
 				return this.externalCalendarFacade.dispatch(methodName, args)
 			case "FileFacade":
 				return this.fileFacade.dispatch(methodName, args)
+			case "ImapImportSystemFacade":
+				return this.imapImportSystemFacade.dispatch(methodName, args)
 			case "InterWindowEventFacade":
 				return this.interWindowEventFacade.dispatch(methodName, args)
 			case "NativeCredentialsFacade":
@@ -103,6 +115,8 @@ export class DesktopGlobalDispatcher {
 				return this.nativeMailImportFacade.dispatch(methodName, args)
 			case "NativePushFacade":
 				return this.nativePushFacade.dispatch(methodName, args)
+			case "OauthFacade":
+				return this.oauthFacade.dispatch(methodName, args)
 			case "SearchTextInAppFacade":
 				return this.searchTextInAppFacade.dispatch(methodName, args)
 			case "SettingsFacade":

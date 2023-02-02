@@ -48,6 +48,8 @@ import { PublicIdentityKeyProvider } from "../../../common/api/worker/facades/Pu
 import { AutosaveFacade } from "../../../common/api/worker/facades/lazy/AutosaveFacade"
 import { SpamClassifier } from "../spamClassification/SpamClassifier"
 import { DriveFacade } from "../../../common/api/worker/facades/lazy/DriveFacade"
+import { ImapImporter } from "../imapimport/ImapImporter"
+import { OauthFacade } from "../../../common/native/common/generatedipc/OauthFacade"
 
 assertWorkerOrNode()
 
@@ -94,6 +96,7 @@ export interface WorkerInterface {
 	readonly spamClassifier: SpamClassifier
 	readonly autosaveFacade: AutosaveFacade
 	readonly driveFacade: DriveFacade
+	readonly imapImporter: ImapImporter
 }
 
 type WorkerRequest = Request<WorkerRequestType>
@@ -311,6 +314,9 @@ export class WorkerImpl implements NativeInterface {
 			},
 			async driveFacade() {
 				return locator.driveFacade()
+			},
+			async imapImporter() {
+				return locator.imapImporter()
 			},
 		}
 	}

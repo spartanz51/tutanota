@@ -1,0 +1,7 @@
+{
+	"name": "ImapGetMailboxResult",
+	"type": "typeref",
+	"location": {
+		"typescript": "../src/common/desktop/imapimport/adsync/imapmail/ImapGetMailboxResult.js"
+	}
+}

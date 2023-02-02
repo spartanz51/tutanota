@@ -969,7 +969,7 @@ o.spec("OfflineStorageDb", function () {
 							sentAttachments: "sentAttachments",
 							receivedAttachments: "receivedAttachments",
 							importedAttachments: "importedAttachments",
-							mailImportStates: "mailImportStates",
+							importFileMailStates: "mailImportStates",
 							currentMailBag: createTestEntity(tutanotaTypeRefs.MailBagTypeRef, {
 								_id: "mailBagId",
 								mails: mailBagMailListId,
@@ -2150,7 +2150,7 @@ o.spec("OfflineStorageDb", function () {
 					sentAttachments: "sentAttachments",
 					receivedAttachments: "receivedAttachments",
 					importedAttachments: "importedAttachments",
-					mailImportStates: "mailImportStates",
+					importFileMailStates: "mailImportStates",
 				},
 				{ populateAggregates: true },
 			)

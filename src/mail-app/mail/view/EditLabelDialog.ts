@@ -5,9 +5,14 @@ import { tutanotaTypeRefs } from "@tutao/typerefs"
 import { isOfflineError } from "../../../common/api/common/utils/ErrorUtils"
 import * as restError from "@tutao/rest-client/error"
 import { MailViewModel } from "./MailViewModel"
-import { ColorPickerView } from "../../../common/gui/base/colorPicker/ColorPickerView"
+import { LegacyColorPickerView } from "../../../common/gui/base/colorPicker/LegacyColorPickerView"
 import { showNotAvailableForFreeDialog } from "../../../common/misc/SubscriptionDialogs"
 import { UpgradePromptType } from "@tutao/app-env"
+import { TextField } from "../../../common/gui/base/TextField"
+import { Icons } from "../../../common/gui/base/icons/Icons"
+import { theme } from "../../../common/gui/theme"
+import { lang } from "../../../common/misc/LanguageViewModel"
+import { ColorPickerView } from "../../../common/gui/base/colorPicker/ColorPickerView"
 
 const LIMIT_EXCEEDED_ERROR = "limitReached"
 
@@ -53,11 +58,42 @@ export async function showEditLabelDialog(mailbox: tutanotaTypeRefs.MailBox | nu
 						name = newName
 					},
 				} satisfies LegacyTextFieldAttrs),
-				m(ColorPickerView, {
+				m(LegacyColorPickerView, {
 					value: color,
 					onselect: (newColor: string) => {
 						color = newColor
 					},
+				}),
+			]),
+	})
+}
+
+export async function showImapEditLabelDialog(
+	attributes: { name: string; color: string },
+	oninput: (name: string) => unknown,
+	onselect: (color: string) => unknown,
+) {
+	Dialog.showActionDialog({
+		title: "addLabel_action",
+		allowCancel: false,
+		okAction: (dialog: Dialog) => {
+			dialog.close()
+		},
+		child: () =>
+			m(".flex.col.gap-16", [
+				m(TextField, {
+					label: "labelInput_label",
+					value: attributes.name,
+					oninput,
+					leadingIcon: {
+						icon: Icons.LabelFilled,
+						color: theme.on_surface_variant,
+					},
+					helpLabel: () => lang.getTranslationText("imapLabelInput_helpLabel"),
+				}),
+				m(ColorPickerView, {
+					value: attributes.color,
+					onselect,
 				}),
 			]),
 	})

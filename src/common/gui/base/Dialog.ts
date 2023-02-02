@@ -25,6 +25,7 @@ import { DialogInjectionRight } from "./DialogInjectionRight"
 import { isOfflineError } from "../../api/common/utils/ErrorUtils.js"
 import Stream from "mithril/stream"
 import { TextField } from "./TextField"
+import { TitleSection } from "./TitleSection"
 
 assertMainOrNode()
 export const INPUT = "input.text, input.tutaui-text-field, textarea, div[contenteditable='true']"
@@ -37,6 +38,7 @@ export const enum DialogType {
 	EditMedium = "EditMedium",
 	EditLarger = "EditLarger",
 	EditLarge = "EditLarge",
+	ImapWizard = "ImapWizard",
 }
 
 type Validator = () => $Promisable<TranslationKey | null>
@@ -270,6 +272,8 @@ export class Dialog implements ModalComponent {
 			dialogStyle += ".dialog-width-m.border-radius-bottom-8"
 		} else if (dialogType === DialogType.EditLarge || dialogType === DialogType.EditLarger) {
 			dialogStyle += ".dialog-width-l.border-radius-bottom-8"
+		} else if (dialogType === DialogType.ImapWizard) {
+			dialogStyle = ".dialog.flex-grow.border-radius-top-8.dialog-width-l.border-radius-bottom-8.nav-bg"
 		}
 
 		return dialogStyle
@@ -393,6 +397,86 @@ export class Dialog implements ModalComponent {
 						[m(".text-break.selectable", lines.join("\n")), typeof infoToAppend === "function" ? infoToAppend() : null],
 					),
 					m(".flex-center.dialog-buttons", m(Button, buttonAttrs)),
+				],
+			})
+				.setCloseHandler(closeAction)
+				.addShortcut({
+					key: Keys.RETURN,
+					shift: false,
+					exec: closeAction,
+					help: "close_alt",
+				})
+				.addShortcut({
+					key: Keys.ESC,
+					shift: false,
+					exec: closeAction,
+					help: "close_alt",
+				})
+				.show()
+		})
+	}
+
+	/**
+	 * show a dialog with an icon and info text and a "close" button
+	 *
+	 * @param title the title to display
+	 * @param messageIdOrMessageFunction message to display
+	 * @param icon the icon to display on the title section
+	 * @param iconOptions the styling for the icon
+	 * @param infoToAppend {?string | lazy<Children>} some text or UI elements to show below the message
+	 * @returns {Promise<void>} a promise that resolves after the dialog is fully closed
+	 */
+	static messageWithTitleSection(
+		title: TranslationKey,
+		messageIdOrMessageFunction: TranslationKey,
+		icon: Icons,
+		iconOptions?: { color: string },
+	): Promise<void> {
+		return newPromise((resolve) => {
+			let dialog: Dialog
+
+			const closeAction = () => {
+				dialog.close()
+				setTimeout(() => resolve(), DefaultAnimationTime)
+			}
+
+			let testId = `dialog:${lang.getTestId(messageIdOrMessageFunction)}`
+			const dialogHeaderBarAttrs: DialogHeaderBarAttrs = {
+				left: [
+					{
+						type: ButtonType.Secondary,
+						label: "close_alt",
+						click: () => {
+							dialog.close()
+						},
+					},
+				],
+				middle: title,
+			}
+			dialog = new Dialog(DialogType.EditMedium, {
+				view: () => [
+					m(".nav-bg.border-radius-top-8", m(DialogHeaderBar, dialogHeaderBarAttrs)),
+					m(
+						".pt-16.nav-bg.border-radius-bottom-8",
+						m(
+							".dialog-max-height.dialog-contentButtonsBottom.text-break.text-prewrap.selectable.scroll",
+							{
+								"data-testid": testId,
+							},
+							[
+								m(TitleSection, {
+									icon: icon,
+									iconOptions: iconOptions,
+									title: "",
+									subTitle: lang.getTranslationText(messageIdOrMessageFunction),
+									style: {
+										marginTop: px(size.spacing_16),
+										borderRadius: px(size.radius_16),
+									},
+								}),
+							],
+						),
+					),
 				],
 			})
 				.setCloseHandler(closeAction)
@@ -841,6 +925,37 @@ export class Dialog implements ModalComponent {
 		})
 	}
 
+	static async showImapInitializationSuccessfulDialog(): Promise<void> {
+		const { ImageWithOptionsDialog } = await import("../dialogs/ImageWithOptionsDialog")
+		return newPromise((resolve) => {
+			let dialog: Dialog
+
+			const closeAction = () => {
+				dialog.close()
+				setTimeout(() => resolve(), DefaultAnimationTime)
+			}
+
+			dialog = new Dialog(DialogType.EditMedium, {
+				view: () =>
+					m(
+						".plr-48",
+						m(ImageWithOptionsDialog, {
+							image: `${window.tutao.appState.prefixWithoutFile}/images/imap-import/initialization-success.svg`,
+							titleText: "imapImportSetup_title",
+							messageText: "imapImportSetupFinished_msg",
+							mainActionText: "ok_action",
+							mainActionClick: () => {
+								closeAction()
+							},
+							subActionText: null,
+							subActionClick: () => {},
+						}),
+					),
+			})
+			dialog.show()
+		})
+	}
+
 	/**
 	 * Shows a dialog with a text field input and ok/cancel buttons.
 	 * @param   props.child either a component (object with view function that returns a Children) or a naked view Function
@@ -1125,6 +1240,17 @@ export class Dialog implements ModalComponent {
 
 	static editSmallDialog<T extends object>(headerBarAttrs: DialogHeaderBarAttrs, child: () => Children): Dialog {
 		return new Dialog(DialogType.EditSmall, {
+			view: () => [
+				/** fixed-height header with a title, left and right buttons that's fixed to the top of the dialog's area */
+				headerBarAttrs.noHeader ? null : m(DialogHeaderBar, headerBarAttrs),
+				/** variable-size child container that may be scrollable. */
+				m(".scroll.hide-outline.plr-24", child()),
+			],
+		})
+	}
+
+	static openImapWizardDialog<T extends object>(headerBarAttrs: DialogHeaderBarAttrs, child: () => Children): Dialog {
+		return new Dialog(DialogType.ImapWizard, {
 			view: () => [
 				/** fixed-height header with a title, left and right buttons that's fixed to the top of the dialog's area */
 				headerBarAttrs.noHeader ? null : m(DialogHeaderBar, headerBarAttrs),

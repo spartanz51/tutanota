@@ -1,5 +1,18 @@
 import { DAY_IN_MILLIS, FULL_INDEXED_TIMESTAMP, ImportStatus, MailSetKind, NOTHING_INDEXED_TIMESTAMP, OperationType } from "@tutao/app-env"
-import { assertNotNull, clamp, defer, DeferredObject, findAllAndRemove, first, isEmpty, isNotEmpty, isNotNull, newPromise, promiseMap } from "@tutao/utils"
+import {
+	assertNotNull,
+	clamp,
+	defer,
+	DeferredObject,
+	findAllAndRemove,
+	first,
+	isEmpty,
+	isNotEmpty,
+	isNotNull,
+	newPromise,
+	promiseMap,
+	TypeRef,
+} from "@tutao/utils"
 import {
 	deconstructMailSetEntryId,
 	elementIdPart,
@@ -9,6 +22,7 @@ import {
 	hasError,
 	isFolder,
 	isSameId,
+	ListElementEntity,
 	listIdPart,
 	sysTypeRefs,
 	tutanotaTypeRefs,
@@ -35,6 +49,24 @@ const TAG = "MailIndexer"
 const enum MailIndexingAbortReason {
 	Cancelled = "MailIndexingCancelled",
 	Restarting = "MailIndexingRestarting",
+}
+
+type CommonImportStateFields = {
+	status: NumberString
+	importedMails: Id
+	_ownerGroup: null | Id
+}
+
+type CommonImportedMailFields = {
+	mailSetEntry: IdTuple
+}
+
+type CommonImportState = ListElementEntity & CommonImportStateFields
+type CommonImportedMail = ListElementEntity & CommonImportedMailFields
+
+enum MailImportType {
+	FileImport,
+	ImapImport,
 }
 
 export class MailIndexer {
@@ -514,13 +546,13 @@ export class MailIndexer {
 		return await this.entityClient.loadAll(tutanotaTypeRefs.MailSetTypeRef, mailbox.mailSets.mailSets)
 	}
 
-	private async processImportStateEntityEvents(operation: OperationType, importStateId: IdTuple): Promise<void> {
+	private async processImportStateEntityEvents(operation: OperationType, importStateId: IdTuple, importType: MailImportType): Promise<void> {
 		await this.initialized.promise
 		if (!this._mailIndexingEnabled) return
 		// we can only process create and update events (create is because of EntityEvent optimization
 		// (CREATE + UPDATE = CREATE) which requires us to process CREATE events with imported mails)
 		if (operation === OperationType.CREATE || operation === OperationType.UPDATE) {
-			const mailIds: IdTuple[] = await this.loadImportedMailIdsInIndexDateRange(importStateId)
+			const mailIds: IdTuple[] = await this.loadImportedMailIdsInIndexDateRange(importStateId, importType)
 
 			const mailData = await this.preloadMails(mailIds)
 			for (const singleMailData of mailData) {
@@ -549,13 +581,29 @@ export class MailIndexer {
 		})
 	}
 
-	private async loadImportedMailIdsInIndexDateRange(importStateId: IdTuple): Promise<IdTuple[]> {
-		const importMailState = await this.entityClient.load(tutanotaTypeRefs.ImportMailStateTypeRef, importStateId)
+	private async loadImportedMailIdsInIndexDateRange(importStateId: IdTuple, mailImportType: MailImportType): Promise<IdTuple[]> {
+		const typeMapping = {
+			[MailImportType.FileImport]: {
+				state: tutanotaTypeRefs.ImportFileMailStateTypeRef,
+				mail: tutanotaTypeRefs.ImportedFileMailTypeRef,
+			},
+			[MailImportType.ImapImport]: {
+				state: tutanotaTypeRefs.ImportImapFolderSyncStateTypeRef,
+				mail: tutanotaTypeRefs.ImportedImapMailTypeRef,
+			},
+		}
+		const refs = typeMapping[mailImportType]
+		if (!refs) {
+			return []
+		}
+
+		const importMailState = await this.entityClient.load(refs.state as TypeRef<CommonImportState>, importStateId)
+
 		const status = parseInt(importMailState.status) as ImportStatus
 		if (status !== ImportStatus.Finished && status !== ImportStatus.Canceled) {
 			return []
 		}
-		const importedMailEntries = await this.entityClient.loadAll(tutanotaTypeRefs.ImportedMailTypeRef, importMailState.importedMails)
+		const importedMailEntries = await this.entityClient.loadAll(refs.mail as TypeRef<CommonImportedMail>, importMailState.importedMails)
 
 		if (isEmpty(importedMailEntries)) {
 			return []
@@ -584,8 +632,10 @@ export class MailIndexer {
 		if (!this._mailIndexingEnabled) return
 
 		for (const event of events) {
-			if (entityUpdateUtils.isUpdateForTypeRef(tutanotaTypeRefs.ImportMailStateTypeRef, event)) {
-				await this.processImportStateEntityEvents(event.operation, [event.instanceListId, event.instanceId])
+			if (entityUpdateUtils.isUpdateForTypeRef(tutanotaTypeRefs.ImportFileMailStateTypeRef, event)) {
+				await this.processImportStateEntityEvents(event.operation, [event.instanceListId, event.instanceId], MailImportType.FileImport)
+			} else if (entityUpdateUtils.isUpdateForTypeRef(tutanotaTypeRefs.ImportImapFolderSyncStateTypeRef, event)) {
+				await this.processImportStateEntityEvents(event.operation, [event.instanceListId, event.instanceId], MailImportType.ImapImport)
 			}
 		}
 	}

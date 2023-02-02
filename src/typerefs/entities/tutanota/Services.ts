@@ -98,6 +98,24 @@ export const GroupInvitationService = Object.freeze({
 	delete: { data: tutanotaTypeRefs.GroupInvitationDeleteDataTypeRef, return: null },
 } as const)
 
+export const ImportImapFolderService = Object.freeze({
+	app: "tutanota",
+	name: "ImportImapFolderService",
+	get: null,
+	post: { data: tutanotaTypeRefs.ImportImapFolderPostInTypeRef, return: tutanotaTypeRefs.ImportImapFolderPostOutTypeRef },
+	put: null,
+	delete: { data: tutanotaTypeRefs.ImportImapFolderDeleteInTypeRef, return: null },
+} as const)
+
+export const ImportImapService = Object.freeze({
+	app: "tutanota",
+	name: "ImportImapService",
+	get: null,
+	post: { data: tutanotaTypeRefs.ImportImapPostInTypeRef, return: tutanotaTypeRefs.ImportImapPostOutTypeRef },
+	put: null,
+	delete: { data: tutanotaTypeRefs.ImportImapDeleteInTypeRef, return: null },
+} as const)
+
 export const ImportMailService = Object.freeze({
 	app: "tutanota",
 	name: "ImportMailService",

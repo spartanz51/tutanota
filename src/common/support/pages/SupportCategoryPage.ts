@@ -5,7 +5,7 @@ import { getCategoryIntroduction, getCategoryName, getTopicIssue, SupportDialogS
 import { Thunk } from "@tutao/utils"
 import { NoSolutionSectionButton } from "../NoSolutionSectionButton.js"
 import { getSupportUsageTestStage } from "../SupportUsageTestUtils.js"
-import { TitleSection } from "../../gui/TitleSection"
+import { TitleSection } from "../../gui/base/TitleSection"
 import { AllIcons } from "../../gui/base/Icon"
 
 type Props = {

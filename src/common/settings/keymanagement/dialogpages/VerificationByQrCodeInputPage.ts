@@ -2,7 +2,7 @@ import m, { Children, Component, Vnode } from "mithril"
 import { lang } from "../../../misc/LanguageViewModel"
 import { KeyVerificationModel } from "../KeyVerificationModel"
 import type { QRCode } from "jsqr"
-import { TitleSection } from "../../../gui/TitleSection"
+import { TitleSection } from "../../../gui/base/TitleSection"
 import { QrCodeScanner, QrCodeScannerErrorType } from "../../../gui/QrCodeScanner"
 import { IdentityKeyQrVerificationResult, IdentityKeyVerificationMethod } from "@tutao/app-env"
 

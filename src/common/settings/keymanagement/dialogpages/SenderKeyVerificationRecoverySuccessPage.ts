@@ -1,7 +1,7 @@
 import m, { Component, Vnode } from "mithril"
 import { lang } from "../../../misc/LanguageViewModel"
 import { SenderKeyVerificationRecoveryModel } from "../../../misc/SenderKeyVerificationRecoveryModel"
-import { TitleSection } from "../../../gui/TitleSection"
+import { TitleSection } from "../../../gui/base/TitleSection"
 import { Icons } from "../../../gui/base/icons/Icons"
 import { theme } from "../../../gui/theme"
 import { Card } from "../../../gui/base/Card"

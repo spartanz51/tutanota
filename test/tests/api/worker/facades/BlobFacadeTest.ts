@@ -7,7 +7,7 @@ import {
 	MAX_NUMBER_OF_BLOBS_IN_BINARY,
 	parseMultipleBlobsResponse,
 	serializeNewBlobsInBinaryChunks,
-	pipelineEncryptAndUpload
+	pipelineEncryptAndUpload,
 } from "../../../../../src/common/api/worker/facades/lazy/BlobFacade.js"
 import { HttpMethod, MAX_BLOB_SIZE_BYTES, RestClient, RestClientOptions, restSuspension } from "@tutao/rest-client"
 import { NativeFileApp } from "../../../../../src/common/native/common/FileApp.js"

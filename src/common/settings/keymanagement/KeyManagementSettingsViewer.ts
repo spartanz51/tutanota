@@ -9,7 +9,7 @@ import { KeyVerificationFacade, TrustedIdentity } from "../../api/worker/facades
 import { showKeyVerificationDialog } from "./KeyVerificationDialog"
 import { MobileSystemFacade } from "../../native/common/generatedipc/MobileSystemFacade"
 import { UsageTestController } from "@tutao/usagetests"
-import { TitleSection } from "../../gui/TitleSection"
+import { TitleSection } from "../../gui/base/TitleSection"
 import { Card } from "../../gui/base/Card"
 import { renderFingerprintAsQrCode } from "./FingerprintRenderers"
 import { MenuTitle } from "../../gui/titles/MenuTitle"

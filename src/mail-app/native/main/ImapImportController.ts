@@ -1,0 +1,262 @@
+import { assertMainOrNode, ImportImapFolderSyncStatus } from "@tutao/app-env"
+import { MailModel } from "../../mail/model/MailModel"
+import { MailboxDetail, MailboxModel } from "../../../common/mailFunctionality/MailboxModel"
+import { ImapImporter, ImportResult, InitializeImapImportParams } from "../../workerUtils/imapimport/ImapImporter"
+import { assertNotNull, first, promiseMap } from "@tutao/utils"
+import { getElementId, tutanotaTypeRefs } from "@tutao/typerefs"
+import { EntityClient } from "../../../common/api/common/EntityClient"
+import {
+	ImapImportState,
+	ImportState,
+	tokenEndpointResponseToTutadbTokenEndpointResponse,
+} from "../../../common/api/common/utils/imapImportUtils/ImapImportUtils"
+import { OauthFacade } from "../../../common/native/common/generatedipc/OauthFacade"
+import { ImapAccount } from "../../../common/desktop/imapimport/adsync/ImapSyncState"
+import { ImapMailbox } from "../../../common/api/common/utils/imapImportUtils/ImapMailbox"
+import { ImapError, ImapErrorCause } from "../../../common/desktop/imapimport/adsync/imapmail/ImapError"
+import { getConfigForProvider, ImapProvider } from "../../../common/api/common/utils/imapImportUtils/ImapKnownConfigs"
+import { OauthHandler } from "../../../common/api/common/utils/imapImportUtils/OauthHandler"
+
+assertMainOrNode()
+
+type ActiveImport = {
+	mailGroupId: Id
+	remoteStateId?: IdTuple
+	remoteMailAddress: string
+	imapImportState: ImapImportState
+	syncProgress: { completed: number; total: number } | null
+}
+
+export class ImapImportController {
+	public mailboxDetails: MailboxDetail[] = []
+	public selectedMailBoxDetail: MailboxDetail | null = null
+	private activeImports: Map<string, ActiveImport> = new Map()
+	constructor(
+		private readonly imapImporter: ImapImporter,
+		private readonly mailModel: MailModel,
+		private readonly mailboxModel: MailboxModel,
+		private readonly entityClient: EntityClient,
+		private readonly oauthFacade: OauthFacade,
+	) {}
+
+	async initializeImport(initializeImportParams: InitializeImapImportParams) {
+		const { result } = await this.imapImporter.initializeImport(initializeImportParams)
+		const remoteId = result.remoteStateId!
+
+		const newImport: ActiveImport = {
+			mailGroupId: initializeImportParams.mailGroupId,
+			imapImportState: result.state,
+			remoteMailAddress: initializeImportParams.importImapAccount.userName,
+			remoteStateId: remoteId,
+			syncProgress: null,
+		}
+
+		this.activeImports.set(this.getMapKey(remoteId), newImport)
+		return newImport
+	}
+
+	async continueImport(imapAccountSyncStateId: IdTuple, retryCount: number = 0): Promise<ImportResult> {
+		if (retryCount > 1) {
+			return { result: { state: new ImapImportState(ImportState.NOT_INITIALIZED) }, error: new ImapError({}, ImapErrorCause.AUTH_FAILED_REFRESH_TOKEN) }
+		}
+		const importResult = await this.imapImporter.continueImport(imapAccountSyncStateId)
+		if (importResult.error && importResult.error.cause === ImapErrorCause.AUTH_FAILED) {
+			const imapAccountSyncState = await this.entityClient.load(tutanotaTypeRefs.ImportImapAccountSyncStateTypeRef, imapAccountSyncStateId)
+			const config = getConfigForProvider(parseInt(imapAccountSyncState.provider) as ImapProvider).oauthConfig
+			if (config && imapAccountSyncState.imapAccount.tokenEndpointResponse?.refreshToken) {
+				const oauthHandler = new OauthHandler(config)
+				const tokenEndpointResponse = await oauthHandler.refreshTokens(imapAccountSyncState.imapAccount.tokenEndpointResponse?.refreshToken)
+				imapAccountSyncState.imapAccount.tokenEndpointResponse = tokenEndpointResponseToTutadbTokenEndpointResponse(tokenEndpointResponse)
+				await this.entityClient.update(imapAccountSyncState)
+				return await this.continueImport(imapAccountSyncStateId, 1)
+			}
+		}
+		return importResult
+	}
+
+	async pauseImport(accountSyncStateId: IdTuple) {
+		if (this.activeImports.has(this.getMapKey(accountSyncStateId))) {
+			const activeImport = this.activeImports.get(this.getMapKey(accountSyncStateId))!
+			activeImport.imapImportState = await this.imapImporter.pauseImport(accountSyncStateId)
+			return activeImport
+		} else {
+			await this.initImapAccountSyncStates()
+			return this.activeImports.get(this.getMapKey(accountSyncStateId))!
+		}
+	}
+
+	async pauseImports() {
+		await promiseMap(Array.from(this.activeImports.values()), async (session) => {
+			if (session.remoteStateId) {
+				session.imapImportState = await this.imapImporter.pauseImport(session.remoteStateId)
+			}
+		})
+	}
+
+	async deleteImport(accountSyncStateId: IdTuple) {
+		const isRemoved = await this.imapImporter.deleteImport(accountSyncStateId)
+		if (isRemoved) {
+			this.activeImports.delete(this.getMapKey(accountSyncStateId))
+		}
+		return isRemoved
+	}
+
+	async deleteImports() {
+		await promiseMap(Array.from(this.activeImports.values()), async (session) => {
+			const accountSyncStateId = session.remoteStateId
+			if (accountSyncStateId) {
+				const isRemoved = await this.imapImporter.deleteImport(accountSyncStateId)
+				if (isRemoved) {
+					this.activeImports.delete(this.getMapKey(accountSyncStateId))
+				}
+				return isRemoved
+			}
+			return false
+		})
+	}
+
+	async openOauthAuthenticationWindow(url: string, redirectUrl: string) {
+		return await this.oauthFacade.openOauthWindow(url, redirectUrl)
+	}
+
+	async loadImapImportState(accountSyncStateId: IdTuple) {
+		const imapImportState = await this.imapImporter.loadImapImportState(accountSyncStateId)
+		if (this.activeImports.has(this.getMapKey(accountSyncStateId))) {
+			const activeImport = this.activeImports.get(this.getMapKey(accountSyncStateId))!
+			activeImport.imapImportState = imapImportState
+		}
+		return imapImportState
+	}
+
+	async loadImapImportStates(): Promise<Map<string, ImapImportState>> {
+		const entries = await promiseMap(Array.from(this.activeImports.values()), async (session) => {
+			const idTuple = session.remoteStateId
+			if (!idTuple) {
+				throw new Error("Cannot load state for session without remoteStateId")
+			}
+
+			const key = this.getMapKey(idTuple)
+			const imapImportState = await this.imapImporter.loadImapImportState(idTuple)
+
+			session.imapImportState = imapImportState
+			return [key, imapImportState] as [string, ImapImportState]
+		})
+
+		return new Map(entries)
+	}
+
+	async updateFolderSyncProgressForActiveImports() {
+		await promiseMap(Array.from(this.activeImports.values()), async (session) => {
+			const id = session.remoteStateId
+			if (id) {
+				session.syncProgress = await this.estimateFolderSyncProgressForAccountSyncState(id)
+			}
+		})
+	}
+
+	async estimateFolderSyncProgressForAccountSyncState(imapAccountSyncStateId: IdTuple) {
+		const imapAccountSyncState = await this.entityClient.load(tutanotaTypeRefs.ImportImapAccountSyncStateTypeRef, imapAccountSyncStateId)
+		const imapFolderSyncStates = await this.entityClient.loadAll(
+			tutanotaTypeRefs.ImportImapFolderSyncStateTypeRef,
+			imapAccountSyncState.imapFolderSyncStateList,
+		)
+		const completedImapFolderSyncStates = imapFolderSyncStates.filter((syncState) => syncState.status === ImportImapFolderSyncStatus.Finished)
+		return { completed: completedImapFolderSyncStates.length, total: imapFolderSyncStates.length }
+	}
+
+	shouldRenderPauseButton(accountSyncStateId: IdTuple) {
+		const activeImport = this.activeImports.get(this.getMapKey(accountSyncStateId))
+		return activeImport && (activeImport.imapImportState.state === ImportState.RUNNING || activeImport.imapImportState.state === ImportState.POSTPONED)
+	}
+
+	shouldRenderResumeButton(accountSyncStateId: IdTuple) {
+		const activeImport = this.activeImports.get(this.getMapKey(accountSyncStateId))
+		return activeImport && activeImport.imapImportState.state === ImportState.PAUSED
+	}
+
+	shouldRenderCancelButton(accountSyncStateId: IdTuple) {
+		const activeImport = this.activeImports.get(this.getMapKey(accountSyncStateId))
+		return (
+			activeImport &&
+			(activeImport.imapImportState.state === ImportState.RUNNING ||
+				activeImport.imapImportState.state === ImportState.POSTPONED ||
+				activeImport.imapImportState.state === ImportState.PAUSED)
+		)
+	}
+
+	getActiveImports() {
+		return this.activeImports
+	}
+
+	getActiveImportMailboxDetail(accountSyncStateId: IdTuple) {
+		const activeImport = this.activeImports.get(this.getMapKey(accountSyncStateId))
+		if (activeImport) {
+			return this.mailboxDetails.find((mailboxDetail) => mailboxDetail.mailGroupInfo.group === activeImport.mailGroupId)
+		}
+	}
+
+	async getImapMailboxesFromServer(imapAccount: ImapAccount) {
+		return await this.imapImporter.getImapMailboxesFromServer(imapAccount)
+	}
+
+	getFolderSystemForSelectedMailbox() {
+		return assertNotNull(this.mailModel.getFolderSystemByGroupId(this.selectedMailBoxDetail!.mailbox._ownerGroup!))
+	}
+
+	async constructImapMailboxesToTutaFoldersMap(imapMailboxes: ReadonlyArray<ImapMailbox>): Promise<Map<string, Id>> {
+		const imapMailboxesToTutaFolders = new Map<string, Id>()
+		const folderSystem = this.getFolderSystemForSelectedMailbox()
+		for (const imapMailbox of imapMailboxes) {
+			if (imapMailbox.specialUse) {
+				const systemFolderType = ImapMailbox.getSpecialUseAsSystemFolderType(imapMailbox)
+				if (systemFolderType !== null) {
+					const systemFolder = assertNotNull(folderSystem.getSystemFolderByType(systemFolderType))
+					imapMailboxesToTutaFolders.set(imapMailbox.path, getElementId(systemFolder))
+				}
+			}
+			const customFolders = folderSystem.getCustomFoldersOfParent(null)
+			const matchingFolder = customFolders.find((customFolder) => imapMailbox.name && customFolder.name === imapMailbox.name)
+			if (imapMailbox.name && matchingFolder) {
+				imapMailboxesToTutaFolders.set(imapMailbox.name, getElementId(matchingFolder))
+			}
+		}
+		return imapMailboxesToTutaFolders
+	}
+
+	async initImapAccountSyncStates(): Promise<Map<string, ImapImportState>> {
+		this.mailboxDetails = await this.mailboxModel.getMailboxDetails()
+		this.selectedMailBoxDetail = first(this.mailboxDetails)
+		const imapImportStates = new Map<string, ImapImportState>()
+		for (const mailboxDetail of this.mailboxDetails) {
+			const mailbox = mailboxDetail.mailbox
+
+			if (mailbox.imapAccountSyncStates) {
+				const importImapAccountSyncStates = await this.entityClient.loadAll(
+					tutanotaTypeRefs.ImportImapAccountSyncStateTypeRef,
+					mailbox.imapAccountSyncStates,
+				)
+				const imapAccountSyncState = first(importImapAccountSyncStates)
+				if (imapAccountSyncState) {
+					this.activeImports.set(this.getMapKey(imapAccountSyncState._id), {
+						remoteStateId: imapAccountSyncState._id,
+						imapImportState: new ImapImportState(ImportState.RUNNING),
+						remoteMailAddress: imapAccountSyncState.imapAccount.userName,
+						mailGroupId: mailbox._ownerGroup!,
+						syncProgress: await this.estimateFolderSyncProgressForAccountSyncState(imapAccountSyncState._id),
+					})
+					imapImportStates.set(this.getMapKey(imapAccountSyncState._id), new ImapImportState(ImportState.RUNNING))
+				}
+			}
+		}
+
+		return imapImportStates
+	}
+
+	private getMapKey(id: IdTuple): string {
+		return id.join("/")
+	}
+
+	onNewMailboxSelected(newMailboxDetail: MailboxDetail) {
+		this.selectedMailBoxDetail = newMailboxDetail
+	}
+}

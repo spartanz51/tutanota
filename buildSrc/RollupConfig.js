@@ -22,6 +22,9 @@ export const dependencyMap = {
 	"@signalapp/sqlcipher": path.normalize("./libs/node-sqlcipher.mjs"),
 	"@fingerprintjs/botd": path.normalize("./libs/botd.mjs"),
 	"./tensorflow-custom": path.normalize("./libs/tensorflow.js"),
+	"./imapflow-custom": path.normalize("./libs/imapflow.js"),
+	"./postalmime-custom": path.normalize("./libs/postalmime.js"),
+	"./openid-client-custom": path.normalize("./libs/openid-client.js"),
 }
 
 export let tsImportAliases = {
@@ -302,7 +305,9 @@ export function getChunkName(moduleId, { getModuleInfo }) {
 		isIn("src/mail-app/workerUtils/worker") ||
 		isIn("src/calendar-app/worker") ||
 		isIn("src/mail-app/workerUtils/offline") ||
-		isIn("src/drive-app/workerUtils")
+		isIn("src/drive-app/workerUtils") ||
+		isIn("src/mail-app/workerUtils/offline") ||
+		isIn("src/mail-app/workerUtils/imapimport")
 	) {
 		return "worker"
 	} else if (moduleId.includes("pow-worker") || moduleId.includes("ProofOfWorkCaptchaUtils")) {
@@ -331,7 +336,8 @@ export function getChunkName(moduleId, { getModuleInfo }) {
 		// CryptoError is needed on the main thread in order to check errors
 		// We have to define both the entry point and the files referenced from it which is annoying
 		isIn("src/crypto/error") ||
-		isIn("src/crypto/misc/CryptoError")
+		isIn("src/crypto/misc/CryptoError") ||
+		isIn("imapimport/adsync/imapmail/")
 	) {
 		// things that are used in both worker and client
 		// entities could be separate in theory but in practice they are anyway
@@ -375,6 +381,9 @@ export function getChunkName(moduleId, { getModuleInfo }) {
 		return "worker" // avoid that crypto stuff is only put into native
 	} else if (isIn("libs/jszip")) {
 		return "jszip"
+		// FIXME: Maybe bundle this with something that is not common?
+	} else if (isIn("libs/openid-client")) {
+		return "common"
 	} else if (isIn("node_modules/@material/material-color-utilities")) {
 		return "material-color-utilities"
 	} else if (isIn("libs/jsQR") || isIn("libs/qrcode")) {

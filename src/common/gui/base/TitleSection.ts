@@ -1,12 +1,13 @@
-import { AllIcons, Icon, IconSize } from "./base/Icon"
+import { AllIcons, Icon, IconSize } from "./Icon"
 import m, { Children, Component, Vnode } from "mithril"
-import { Card } from "./base/Card"
+import { Card } from "./Card"
 
 export type SettingsTitleSectionAttrsType = {
 	icon?: AllIcons
-	iconOptions?: { color: string }
+	iconOptions?: { color: string; class?: string }
 	title: string
 	subTitle: Children
+	style?: Record<string, any>
 }
 
 export class TitleSection implements Component<SettingsTitleSectionAttrsType> {
@@ -20,6 +21,7 @@ export class TitleSection implements Component<SettingsTitleSectionAttrsType> {
 					style: {
 						paddingTop: "8px",
 						paddingBottom: "8px",
+						...attrs.style,
 					},
 				},
 				m(
@@ -28,6 +30,7 @@ export class TitleSection implements Component<SettingsTitleSectionAttrsType> {
 						? m(Icon, {
 								icon: attrs.icon,
 								size: IconSize.PX64,
+								class: attrs.iconOptions?.class,
 								style: {
 									fill: attrs.iconOptions?.color,
 								},
@@ -43,7 +46,7 @@ export class TitleSection implements Component<SettingsTitleSectionAttrsType> {
 					},
 					attrs.title,
 				),
-				m(".center.smaller", attrs.subTitle),
+				m(".center.smaller.text-preline", attrs.subTitle),
 			),
 		)
 	}

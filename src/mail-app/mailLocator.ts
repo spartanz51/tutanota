@@ -152,6 +152,8 @@ import { CalendarEventUpdateCoordinator } from "../calendar-app/calendar/model/C
 import { ParsedEvent } from "../common/calendar/gui/ImportExportUtils"
 import { MoveItems } from "../drive-app/drive/view/DriveMoveItemDialog"
 import { DriveFilePicker } from "../drive-app/drive/view/DriveFilePicker"
+import { ImapImporter } from "./workerUtils/imapimport/ImapImporter"
+import type { OauthFacade } from "../common/native/common/generatedipc/OauthFacade"
 
 assertMainOrNode()
 
@@ -223,16 +225,17 @@ class MailLocator implements CommonLocator {
 	autosaveFacade!: AutosaveFacade
 	driveFacade!: DriveFacade
 	transferProgressDispatcher!: TransferProgressDispatcher
+	imapImporter!: ImapImporter
 
 	private nativeInterfaces: NativeInterfaces | null = null
 	private mailImporter: MailImporter | null = null
 	private entropyFacade!: EntropyFacade
 	private sqlCipherFacade!: SqlCipherFacade
+	private oauthFacade: OauthFacade | null = null
 
 	readonly typeModelResolver: lazy<ClientTypeModelResolver> = lazyMemoized(() => {
 		return ClientModelInfo.getInstance()
 	})
-
 	readonly recipientsModel: lazyAsync<RecipientsModel> = lazyMemoized(async () => {
 		const { RecipientsModel } = await import("../common/api/main/RecipientsModel.js")
 		return new RecipientsModel(this.contactModel, this.logins, this.mailFacade, this.entityClient)
@@ -689,6 +692,7 @@ class MailLocator implements CommonLocator {
 					}
 					await mailLocator.indexerFacade.deleteIndex(userId)
 					if (isDesktop()) {
+						await (await mailLocator.imapImportController()).pauseImports()
 						await mailLocator.exportFacade.clearExportState(userId)
 					}
 				})
@@ -799,6 +803,7 @@ class MailLocator implements CommonLocator {
 			autosaveFacade,
 			spamClassifier,
 			driveFacade,
+			imapImporter,
 		} = this.worker.getWorkerInterface() as WorkerInterface
 		this.loginFacade = loginFacade
 		this.customerFacade = customerFacade
@@ -862,6 +867,7 @@ class MailLocator implements CommonLocator {
 			mailLocator.search.indexState(state)
 		})
 		this.autosaveFacade = autosaveFacade
+		this.imapImporter = imapImporter
 
 		this.usageTestModel = new UsageTestModel(
 			{
@@ -913,6 +919,7 @@ class MailLocator implements CommonLocator {
 			this.nativeInterfaces = createNativeInterfaces(
 				this.webMobileFacade,
 				new WebDesktopFacade(this.logins, async () => this.native),
+				this.imapImporter,
 				new WebInterWindowEventFacade(this.logins, windowFacade, deviceConfig),
 				new WebCommonNativeFacade(
 					this.logins,
@@ -954,6 +961,7 @@ class MailLocator implements CommonLocator {
 						openSettingsHandler,
 					)
 					this.exportFacade = desktopInterfaces.exportFacade
+					this.oauthFacade = desktopInterfaces.desktopOauthWindowFacade
 				}
 			} else if (isAndroidApp() || isIOSApp()) {
 				const { SystemPermissionHandler } = await import("../common/native/main/SystemPermissionHandler.js")
@@ -1286,6 +1294,12 @@ class MailLocator implements CommonLocator {
 		const { AddNotificationEmailDialog } = await import("../mail-app/settings/AddNotificationEmailDialog.js")
 		return new AddNotificationEmailDialog(this.logins, this.entityClient)
 	}
+
+	readonly imapImportController = lazyMemoized(async () => {
+		const { ImapImportController } = await import("./native/main/ImapImportController.js")
+
+		return new ImapImportController(this.imapImporter, this.mailModel, this.mailboxModel, this.entityClient, assertNotNull(this.oauthFacade))
+	})
 
 	readonly mailExportController: () => Promise<MailExportController> = lazyMemoized(async () => {
 		const { getHtmlSanitizer } = await import("../common/misc/HtmlSanitizer")

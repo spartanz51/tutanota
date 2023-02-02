@@ -1215,6 +1215,16 @@ export const enum ImportStatus {
 	Finished = 3,
 }
 
+// FIXME keep in sync with tutadb, decide which states to keep
+// fixme due to how MailIndexer works currently, it needs to be also similarly "synced" with ImportStatus,
+// fixme maybe change the ImportStatus cast in MailIndexer#loadImportedMailIdsInIndexDateRange to depend on the importType?
+export const enum ImportImapFolderSyncStatus {
+	NotInitialized = "0",
+	Running = "1",
+	Paused = "2",
+	Finished = "3",
+}
+
 export const TUTA_MAIL_GOOGLE_PLAY_URL = "https://play.google.com/store/apps/details?id=de.tutao.tutanota"
 export const TUTA_MAIL_APP_STORE_URL = "https://apps.apple.com/app/secure-mail-client-tuta/id922429609"
 export const TUTA_CALENDAR_GOOGLE_PLAY_URL = "https://play.google.com/store/apps/details?id=de.tutao.calendar"
