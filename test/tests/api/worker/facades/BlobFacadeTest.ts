@@ -214,7 +214,7 @@ o.spec("BlobFacade", function () {
 			when(cryptoFacadeMock.resolveSessionKey(file)).thenResolve(sessionKey)
 			const requestBody = { "request-body": "1" }
 			when(instancePipelineMock.mapAndEncrypt(anything(), anything(), anything())).thenResolve(requestBody)
-			// data size is 65 (16 data block, 16 iv, 32 hmac, 1 byte for mac marking)
+			// data size is 65 (16 data block, 16 initialization vector, 32 hmac, 1 byte for mac marking)
 			const blobSizeBinary = new Uint8Array([0, 0, 0, 65])
 			const blobResponse = concat(
 				// number of blobs
@@ -266,7 +266,7 @@ o.spec("BlobFacade", function () {
 			when(cryptoFacadeMock.resolveSessionKey(file)).thenResolve(sessionKey)
 			const requestBody = { "request-body": "1" }
 			when(instancePipelineMock.mapAndEncrypt(anything(), anything(), anything())).thenResolve(requestBody)
-			// data size is 65 (16 data block, 16 iv, 32 hmac, 1 byte for mac marking)
+			// data size is 65 (16 data block, 16 initialization vector, 32 hmac, 1 byte for mac marking)
 			const blobSizeBinary = new Uint8Array([0, 0, 0, 65])
 			const blobResponse = concat(
 				// number of blobs
@@ -329,7 +329,7 @@ o.spec("BlobFacade", function () {
 			when(cryptoFacadeMock.resolveSessionKey(file)).thenResolve(sessionKey)
 			const requestBody = { "request-body": "1" }
 			when(instancePipelineMock.mapAndEncrypt(anything(), anything(), anything())).thenResolve(requestBody)
-			// data size is 65 (16 data block, 16 iv, 32 hmac, 1 byte for mac marking)
+			// data size is 65 (16 data block, 16 initialization vector, 32 hmac, 1 byte for mac marking)
 			const blobSizeBinary = new Uint8Array([0, 0, 0, 65])
 			const blobResponse = concat(
 				// number of blobs
@@ -581,7 +581,7 @@ o.spec("BlobFacade", function () {
 			when(cryptoFacadeMock.resolveSessionKey(anotherFile)).thenResolve(anothersessionKey)
 			const requestBody = { "request-body": "1" }
 			when(instancePipelineMock.mapAndEncrypt(anything(), anything(), anything())).thenResolve(requestBody)
-			// data size is 65 (16 data block, 16 iv, 32 hmac, 1 byte for mac marking)
+			// data size is 65 (16 data block, 16 initialization vector, 32 hmac, 1 byte for mac marking)
 			const blobSizeBinary = new Uint8Array([0, 0, 0, 65])
 			const blobResponse = concat(
 				// number of blobs
@@ -691,7 +691,7 @@ o.spec("BlobFacade", function () {
 					anything(),
 				),
 			).thenResolve(requestBody2)
-			// data size is 65 (16 data block, 16 iv, 32 hmac, 1 byte for mac marking)
+			// data size is 65 (16 data block, 16 initialization vector, 32 hmac, 1 byte for mac marking)
 			const blobSizeBinary = new Uint8Array([0, 0, 0, 65])
 			const blobResponse1 = concat(
 				// number of blobs
@@ -786,7 +786,7 @@ o.spec("BlobFacade", function () {
 			when(cryptoFacadeMock.resolveSessionKey(anotherFile)).thenResolve(anothersessionKey)
 			const requestBody = { "request-body": "1" }
 			when(instancePipelineMock.mapAndEncrypt(anything(), anything(), anything())).thenResolve(requestBody)
-			// data size is 65 (16 data block, 16 iv, 32 hmac, 1 byte for mac marking)
+			// data size is 65 (16 data block, 16 initialization vector, 32 hmac, 1 byte for mac marking)
 			const blobSizeBinary = new Uint8Array([0, 0, 0, 65])
 			const blobResponse = concat(
 				// number of blobs
@@ -858,7 +858,7 @@ o.spec("BlobFacade", function () {
 			when(cryptoFacadeMock.resolveSessionKey(anotherFile)).thenResolve(anothersessionKey)
 			const requestBody = { "request-body": "1" }
 			when(instancePipelineMock.mapAndEncrypt(anything(), anything(), anything())).thenResolve(requestBody)
-			// data size is 65 (16 data block, 16 iv, 32 hmac, 1 byte for mac marking)
+			// data size is 65 (16 data block, 16 initialization vector, 32 hmac, 1 byte for mac marking)
 			const blobSizeBinary = new Uint8Array([0, 0, 0, 65])
 			const blobResponse = concat(
 				// number of blobs

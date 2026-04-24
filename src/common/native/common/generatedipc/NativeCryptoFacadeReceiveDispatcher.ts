@@ -8,6 +8,7 @@ import { IPCEd25519PrivateKey } from "./IPCEd25519PrivateKey.js"
 import { IPCEd25519PublicKey } from "./IPCEd25519PublicKey.js"
 import { IPCEd25519Signature } from "./IPCEd25519Signature.js"
 import { NativeCryptoFacade } from "./NativeCryptoFacade.js"
+import { InitializationVector } from "@tutao/crypto"
 
 export class NativeCryptoFacadeReceiveDispatcher {
 	constructor(private readonly facade: NativeCryptoFacade) {}
@@ -27,8 +28,8 @@ export class NativeCryptoFacadeReceiveDispatcher {
 			case "aesEncryptFile": {
 				const key: Uint8Array = arg[0]
 				const fileUri: string = arg[1]
-				const iv: Uint8Array = arg[2]
-				return this.facade.aesEncryptFile(key, fileUri, iv)
+				const initializationVector: InitializationVector = arg[2]
+				return this.facade.aesEncryptFile(key, fileUri, initializationVector)
 			}
 			case "aesDecryptFile": {
 				const key: Uint8Array = arg[0]

@@ -80,6 +80,7 @@ import { KeyVerificationMismatchError } from "../../common/error/KeyVerification
 import { InstanceSessionKeysCache } from "../facades/InstanceSessionKeysCache"
 import { isOfflineError } from "../../common/utils/ErrorUtils"
 import { NotFoundError } from "@tutao/rest-client/error"
+import { validateKdfNonceLength } from "../../../../crypto/encryption/symmetric/SymmetricCipherUtils"
 
 assertWorkerOrNode()
 
@@ -520,7 +521,7 @@ export class CryptoFacade {
 				await this.typeModelResolver.resolveServerTypeReference(instance._type),
 				entityAdapter.encryptedParsedInstance as ServerModelEncryptedParsedInstance,
 				resolvedSessionKeyForInstance,
-				instance._kdfNonce ?? null,
+				validateKdfNonceLength(instance._kdfNonce ?? null),
 				instance._ownerGroup ?? null,
 			)
 			decryptedInstance = await this.instancePipeline.modelMapper.mapToInstance(instance._type, parsedInstance)
@@ -912,6 +913,15 @@ export class CryptoFacade {
 	async postUpdateSessionKeysService(instanceSessionKeys: Array<sysTypeRefs.InstanceSessionKey>) {
 		const input = sysTypeRefs.createUpdateSessionKeysPostIn({ ownerEncSessionKeys: instanceSessionKeys })
 		await this.serviceExecutor.post(sysServices.UpdateSessionKeysService, input)
+	}
+
+	async postUpdateKdfNonceService(instanceKdfNonce: sysTypeRefs.InstanceKdfNonce) {
+		const input = sysTypeRefs.createUpdateKdfNoncePostIn({ instanceKdfNonce: instanceKdfNonce })
+		await this.serviceExecutor.post(sysServices.UpdateKdfNonceService, input)
+	}
+
+	async getCurrentSymGroupKey(groupId: Id): Promise<VersionedKey> {
+		return await this.keyLoaderFacade.getCurrentSymGroupKey(groupId)
 	}
 
 	/*************************** Migrations **********************************/

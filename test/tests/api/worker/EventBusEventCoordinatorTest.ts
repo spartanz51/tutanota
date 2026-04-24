@@ -3,7 +3,7 @@ import { EventBusEventCoordinator } from "../../../../src/common/api/worker/Even
 import { func, matchers, object, verify, when } from "testdouble"
 import { entityUpdateUtils, sysTypeRefs } from "@tutao/typerefs"
 import { createTestEntity } from "../../TestUtils.js"
-import { RolloutType } from "../../../../src/app-env"
+import { OperationType, RolloutType } from "../../../../src/app-env"
 import { UserFacade } from "../../../../src/common/api/worker/facades/UserFacade.js"
 import { EntityClient } from "../../../../src/common/api/common/EntityClient.js"
 import { lazyAsync, lazyMemoized } from "@tutao/utils"
@@ -17,7 +17,6 @@ import { SyncTracker } from "../../../../src/common/api/main/SyncTracker"
 import { IdentityKeyCreator } from "../../../../src/common/api/worker/facades/lazy/IdentityKeyCreator"
 
 import { noPatchesAndInstance } from "./EventBusClientTest"
-import { OperationType } from "../../../../src/app-env"
 
 o.spec("EventBusEventCoordinatorTest", () => {
 	let eventBusEventCoordinator: EventBusEventCoordinator
@@ -73,7 +72,7 @@ o.spec("EventBusEventCoordinatorTest", () => {
 			object(),
 			keyRotationFacadeMock,
 			async () => cacheManagementFacade,
-			async (error: Error) => {},
+			async (_error: Error) => {},
 			(_) => {},
 			rolloutFacadeMock,
 			async () => groupManagementFacade,
@@ -174,11 +173,12 @@ o.spec("EventBusEventCoordinatorTest", () => {
 			verify(identityKeyCreator.createIdentityKeyPairForExistingTeamGroups(teamGroupIds))
 		})
 
-		o("does not execute rollouts if it is not the leader client", async function () {
+		o("does not execute rollouts, except for enabling AEAD encryption, if it is not the leader client", async function () {
 			when(userFacade.isLeader()).thenReturn(false)
 
 			await eventBusEventCoordinator.onSyncDone()
-			verify(rolloutFacadeMock.processRollout(matchers.anything()), { times: 0 })
+			verify(rolloutFacadeMock.processRollout(matchers.anything()), { times: 1 })
+			verify(rolloutFacadeMock.processRollout(RolloutType.EncryptionOfAttributesViaAead))
 		})
 	})
 

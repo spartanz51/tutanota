@@ -46,6 +46,7 @@ import { AsymmetricCryptoFacade } from "../../../../../src/common/api/worker/cry
 import { PublicEncryptionKeyProvider } from "../../../../../src/common/api/worker/facades/PublicEncryptionKeyProvider"
 import { KeyRotationFacade } from "../../../../../src/common/api/worker/facades/KeyRotationFacade"
 import { InstanceSessionKeysCache } from "../../../../../src/common/api/worker/facades/InstanceSessionKeysCache"
+import { SymmetricEncryptionScheme } from "@tutao/crypto/symmetric-cipher-facade"
 
 const { anything, argThat, captor } = matchers
 
@@ -143,6 +144,9 @@ o.spec("EntityRestClient", function () {
 			},
 			isFullyLoggedIn(): boolean {
 				return fullyLoggedIn
+			},
+			getDefaultSymmetricEncryptionScheme(): SymmetricEncryptionScheme {
+				return SymmetricEncryptionScheme.AesCbc
 			},
 		}
 

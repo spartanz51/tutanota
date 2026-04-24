@@ -155,27 +155,38 @@ export {
 	type AesKey,
 	type Aes128Key,
 	type Aes256Key,
-	IV_BYTE_LENGTH,
-	FIXED_IV,
-	generateIV,
+	INITIALIZATION_VECTOR_LENGTH_BYTES,
+	FIXED_INITIALIZATION_VECTOR,
+	generateInitializationVector,
+	InitializationVector,
+	KdfNonce,
 } from "./encryption/symmetric/SymmetricCipherUtils.js"
 export { AesKeyLength, getAndVerifyAesKeyLength, getKeyLengthInBytes } from "./encryption/symmetric/AesKeyLength.js"
 export { blake3Hash, blake3Mac, blake3MacVerify, blake3Kdf } from "./hashes/Blake3.js"
 export { AeadFacade, PADDING_BYTE } from "./encryption/symmetric/AeadFacade.js"
 export * as cryptoUtils from "./CryptoUtils.js"
 export * from "./CryptoWrapper.js"
-export { SymmetricKeyDeriver, SymmetricSubKeys, AeadSubKeys } from "./encryption/symmetric/SymmetricKeyDeriver.js"
+export {
+	SymmetricKeyDeriver,
+	SymmetricSubKeys,
+	AeadSubKeys,
+	AesSubKeys,
+	AesCbcThenHmacSubKeys,
+	UnusedReservedUnauthenticatedSubKeys,
+} from "./encryption/symmetric/SymmetricKeyDeriver.js"
 export {
 	SymmetricCipherVersion,
 	SymmetricAesCipherVersion,
 	SymmetricAeadCipherVersion,
 	getSymmetricCipherVersion,
+	SymmetricCipherVersionAeadWithGroupKey,
+	SymmetricCipherVersionAeadWithSessionKey,
+	SymmetricAeadCipherVersionMaybeWithGroupKeyVersion,
 } from "./encryption/symmetric/SymmetricCipherVersion.js"
-export {
-	SymmetricCipherFacade,
-	SYMMETRIC_CIPHER_FACADE,
-	ValueDecryptor,
-	InstanceDecryptor,
-	MissingSessionKey,
-} from "./encryption/symmetric/SymmetricCipherFacade.js"
+export { SymmetricCipherFacade, SYMMETRIC_CIPHER_FACADE } from "./encryption/symmetric/SymmetricCipherFacade.js"
 export { AesCbcFacade } from "./encryption/symmetric/AesCbcFacade.js"
+export { InstanceDecryptor } from "./encryption/symmetric/decryption/InstanceDecryptor"
+export { MissingSessionKey } from "./encryption/symmetric/decryption/InstanceDecryptor"
+export { ValueDecryptor } from "./encryption/symmetric/decryption/ValueDecryptor"
+export { AEAD_ATTRIBUTE_ON_UNAUTHENTICATED_INSTANCE_SESSION_KEY_DOMAIN } from "./encryption/symmetric/decryption/InstanceDecryptor"
+export { AEAD_ATTRIBUTE_ON_UNAUTHENTICATED_INSTANCE_GROUP_KEY_DOMAIN } from "./encryption/symmetric/decryption/InstanceDecryptor"

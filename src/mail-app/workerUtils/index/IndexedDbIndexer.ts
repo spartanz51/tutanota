@@ -33,7 +33,8 @@ import {
 	aesDecryptUnauthenticated,
 	AesKey,
 	decryptKey,
-	IV_BYTE_LENGTH,
+	generateInitializationVector,
+	INITIALIZATION_VECTOR_LENGTH_BYTES,
 	random,
 	VersionedKey,
 } from "@tutao/crypto"
@@ -56,6 +57,7 @@ import { EncryptedDbWrapper } from "../../../common/api/worker/search/EncryptedD
 import { DateProvider } from "../../../common/api/common/DateProvider"
 import { IndexingNotSupportedError } from "../../../common/api/common/error/IndexingNotSupportedError"
 import { OutOfSyncError } from "../../../common/api/common/error/OutOfSyncError"
+import { validateInitializationVectorLength } from "../../../crypto/encryption/symmetric/SymmetricCipherUtils"
 
 export type InitParams = {
 	user: sysTypeRefs.User
@@ -331,14 +333,14 @@ export class IndexedDbIndexer implements Indexer {
 
 	private async createIndexTables(user: sysTypeRefs.User, userGroupKey: VersionedKey): Promise<void> {
 		const key = aes256RandomKey()
-		const iv = random.generateRandomData(IV_BYTE_LENGTH)
-		this.db.init({ key, iv })
+		const initializationVector = generateInitializationVector()
+		this.db.init({ key, initializationVector })
 		const groupBatches = await this._loadGroupData(user)
 		const userEncDbKey = _encryptKeyWithVersionedKey(userGroupKey, key)
 		const transaction = await this.db.dbFacade.createTransaction(false, [MetaDataOS, GroupDataOS])
 		await transaction.put(MetaDataOS, Metadata.userEncDbKey, userEncDbKey.key)
 		await transaction.put(MetaDataOS, Metadata.mailIndexingEnabled, this.mailIndexer.mailIndexingEnabled)
-		await transaction.put(MetaDataOS, Metadata.encDbIv, aes256EncryptSearchIndexEntry(key, iv))
+		await transaction.put(MetaDataOS, Metadata.encDbIv, aes256EncryptSearchIndexEntry(key, initializationVector))
 		await transaction.put(MetaDataOS, Metadata.userGroupKeyVersion, userEncDbKey.encryptingKeyVersion)
 		await transaction.put(MetaDataOS, Metadata.lastEventIndexTimeMs, this.serverDateProvider.now())
 		await this._initGroupData(groupBatches, transaction)
@@ -347,8 +349,8 @@ export class IndexedDbIndexer implements Indexer {
 
 	private async loadIndexTables(user: sysTypeRefs.User, userGroupKey: AesKey, metaData: EncryptedIndexerMetaData): Promise<void> {
 		const key = decryptKey(userGroupKey, metaData.userEncDbKey)
-		const iv = aesDecryptUnauthenticated(key, neverNull(metaData.encDbIv))
-		this.db.init({ key, iv })
+		const initializationVector = validateInitializationVectorLength(aesDecryptUnauthenticated(key, neverNull(metaData.encDbIv)))
+		this.db.init({ key, initializationVector })
 		const groupDiff = await this._loadGroupDiff(user)
 		await this._updateGroups(user, groupDiff)
 		await this.mailIndexer.updateCurrentIndexTimestamp(user)

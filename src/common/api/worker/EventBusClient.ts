@@ -4,6 +4,7 @@ import {
 	AttributeModel,
 	Entity,
 	entityUpdateUtils,
+	GENERATED_MIN_ID,
 	hasError,
 	ServerModelParsedInstance,
 	ServerModelUntypedInstance,
@@ -33,6 +34,7 @@ import { ExposedProgressTracker } from "../main/ProgressTracker"
 import { ProgressMonitorDelegate } from "./ProgressMonitorDelegate"
 import { filterIndexMemberships } from "../common/utils/IndexUtils"
 import { EventQueue, QueuedBatch } from "./EventQueue"
+import { validateKdfNonceLength } from "../../../crypto/encryption/symmetric/SymmetricCipherUtils"
 
 assertWorkerOrNode()
 
@@ -421,7 +423,7 @@ export class EventBusClient {
 					serverTypeModel,
 					encryptedParsedInstance,
 					sessionKey,
-					entityAdapter._kdfNonce,
+					validateKdfNonceLength(entityAdapter._kdfNonce),
 					entityAdapter._ownerGroup,
 				)
 
@@ -440,7 +442,7 @@ export class EventBusClient {
 							mailDetailsBlobServerTypeModel,
 							mailDetailsBlobEncryptedParsedInstance,
 							sessionKey,
-							entityAdapter._kdfNonce,
+							validateKdfNonceLength(entityAdapter._kdfNonce),
 							entityAdapter._ownerGroup,
 						)
 						return { parsedInstance, parsedBlobInstance }

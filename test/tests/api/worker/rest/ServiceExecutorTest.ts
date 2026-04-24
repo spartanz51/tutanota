@@ -22,6 +22,7 @@ import { LoginIncompleteError } from "../../../../../src/common/api/common/error
 import { clientInitializedTypeModelResolver, createTestEntity, instancePipelineFromTypeModelResolver, removeOriginals } from "../../../TestUtils.js"
 import { InstancePipeline } from "@tutao/instance-pipeline"
 import { aes256RandomKey } from "@tutao/crypto"
+import { SymmetricEncryptionScheme } from "@tutao/crypto/symmetric-cipher-facade"
 
 const { anything } = matchers
 
@@ -44,6 +45,9 @@ o.spec("ServiceExecutor", function () {
 		},
 		isFullyLoggedIn(): boolean {
 			return fullyLoggedIn
+		},
+		getDefaultSymmetricEncryptionScheme(): SymmetricEncryptionScheme {
+			return SymmetricEncryptionScheme.AesCbc
 		},
 	}
 

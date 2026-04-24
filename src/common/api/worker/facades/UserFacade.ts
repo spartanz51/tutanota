@@ -5,6 +5,7 @@ import { isSameId, sysTypeRefs } from "@tutao/typerefs"
 import { LoginIncompleteError } from "../../common/error/LoginIncompleteError"
 import { KeyCache } from "./KeyCache.js"
 import { CryptoError } from "@tutao/crypto/error"
+import { SymmetricEncryptionScheme } from "../../../../crypto/encryption/symmetric/SymmetricCipherFacade"
 
 export interface AuthDataProvider {
 	/**
@@ -13,6 +14,7 @@ export interface AuthDataProvider {
 	createAuthHeaders(): Dict
 
 	isFullyLoggedIn(): boolean
+	getDefaultSymmetricEncryptionScheme(): SymmetricEncryptionScheme
 }
 
 /** Holder for the user and session-related data on the worker side. */
@@ -20,6 +22,7 @@ export class UserFacade implements AuthDataProvider {
 	private user: sysTypeRefs.User | null = null
 	private accessToken: string | null = null
 	private leaderStatus!: sysTypeRefs.WebsocketLeaderStatus
+	private defaultSymmetricEncryptionScheme: SymmetricEncryptionScheme = SymmetricEncryptionScheme.AesCbc
 
 	constructor(
 		private readonly keyCache: KeyCache,
@@ -28,7 +31,15 @@ export class UserFacade implements AuthDataProvider {
 		this.reset()
 	}
 
-	// Login process is somehow multi-step, and we don't use a separate network stack for it. So we have to break up setters.
+	getDefaultSymmetricEncryptionScheme(): SymmetricEncryptionScheme {
+		return this.defaultSymmetricEncryptionScheme
+	}
+
+	useAeadEncryption(): void {
+		this.defaultSymmetricEncryptionScheme = SymmetricEncryptionScheme.Aead
+	}
+
+	// Login process is somehow multistep, and we don't use a separate network stack for it. So we have to break up setters.
 	// 1. We need to download user. For that we need to set access token already (to authenticate the request for the server as it is passed in headers).
 	// 2. We need to get group keys. For that we need to unlock userGroupKey with userPassphraseKey
 	// so this leads to this steps in UserFacade:
@@ -77,10 +88,10 @@ export class UserFacade implements AuthDataProvider {
 	}
 
 	/**
-	 * Derives a distribution key from the password key to share the new user group key of the user to their other clients (apps, web etc)
+	 * Derives a distribution key from the password key to share the new user group key of the user to their other clients (apps, web etc.)
 	 * This is a fallback function that gets called when the output key of `deriveUserDistKey` fails to decrypt the new user group key
 	 * @deprecated
-	 * @param userGroupId user group id of the logged in user
+	 * @param userGroupId user group id of the logged-in user
 	 * @param userPasswordKey current password key of the user
 	 */
 	deriveLegacyUserDistKey(userGroupId: Id, userPasswordKey: AesKey): AesKey {
@@ -99,8 +110,8 @@ export class UserFacade implements AuthDataProvider {
 	}
 
 	/**
-	 * Derives a distribution to share the new user group key of the user to their other clients (apps, web etc)
-	 * @param userGroupId user group id of the logged in user
+	 * Derives a distribution to share the new user group key of the user to their other clients (apps, web etc.)
+	 * @param userGroupId user group id of the logged-in user
 	 * @param newUserGroupKeyVersion the new user group key version
 	 * @param userPasswordKey current password key of the user
 	 */

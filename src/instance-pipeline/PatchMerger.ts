@@ -6,13 +6,13 @@
 import {
 	AssociationType,
 	AttributeModel,
+	EncryptedModelValue,
 	EncryptedParsedAssociation,
 	EncryptedParsedValue,
 	Entity,
 	entityUpdateUtils,
 	hasError,
 	isSameId,
-	ModelValue,
 	ParsedAssociation,
 	ParsedInstance,
 	ParsedValue,
@@ -28,6 +28,9 @@ import { assertNotNull, Base64, deepEqual, isEmpty, isSameTypeRef, Nullable, pro
 import { convertDbToJsType, InstancePipeline, PatchOperationError } from "@tutao/instance-pipeline"
 import { AesKey, InstanceDecryptor, SymmetricCipherFacade } from "@tutao/crypto"
 import { CryptoError } from "@tutao/crypto/error"
+import { validateKdfNonceLength } from "../crypto/encryption/symmetric/SymmetricCipherUtils"
+
+import { InstanceTypeId } from "../crypto/encryption/symmetric/SymmetricKeyDeriver"
 
 export type SessionKeyResolver = (instance: Entity) => Promise<Nullable<AesKey>>
 
@@ -67,11 +70,15 @@ export class PatchMerger {
 			const instance = await this.instancePipeline.modelMapper.mapToInstance(instanceType, parsedInstance)
 			const sk = await this.sessionKeyResolver(instance)
 			const ownerGroup = instance._ownerGroup ?? null
-			const kdfNonce = instance._kdfNonce ?? null
-			const instanceDecryptor = this.symmetricCipherFacade.getInstanceDecryptor(sk, kdfNonce, String(instanceType.typeId))
+			const kdfNonce = validateKdfNonceLength(instance._kdfNonce ?? null)
+			const instanceTypeId: InstanceTypeId = {
+				applicationName: instanceType.app,
+				typeId: instanceType.typeId,
+			}
+			const instanceDecryptor = this.symmetricCipherFacade.getInstanceDecryptor(sk, kdfNonce, instanceTypeId)
 			// We need to preserve the order of patches, so no promiseMap here
 			for (const patch of patches) {
-				const appliedSuccessfully = await this.applySinglePatch(parsedInstance, typeModel, patch, sk, kdfNonce, ownerGroup, instanceDecryptor)
+				const appliedSuccessfully = await this.applySinglePatch(parsedInstance, typeModel, patch, ownerGroup, instanceDecryptor)
 				if (!appliedSuccessfully) {
 					return null
 				}
@@ -101,8 +108,6 @@ export class PatchMerger {
 		parsedInstance: ServerModelParsedInstance,
 		typeModel: ServerTypeModel,
 		patch: sysTypeRefs.Patch,
-		sk: Nullable<AesKey>,
-		kdfNonce: Nullable<Uint8Array>,
 		ownerGroup: Nullable<Id>,
 		instanceDecryptor: InstanceDecryptor,
 	): Promise<boolean> {
@@ -118,12 +123,12 @@ export class PatchMerger {
 			// We need to map and decrypt for REPLACE and ADDITEM as the payloads are encrypted, REMOVEITEM only has either aggregate ids, generated ids, or id tuples
 			if (patch.patchOperation !== PatchOperationType.REMOVE_ITEM) {
 				const encryptedParsedValue: Nullable<EncryptedParsedValue | EncryptedParsedAssociation> = await this.parseValueOnPatch(pathResult, patch.value)
-
 				const isAggregation = pathResultTypeModel.associations[attributeId]?.type === AssociationType.Aggregation
 				const isEncryptedValue = pathResultTypeModel.values[attributeId]?.encrypted
-				const needsDecryption = ((isAggregation && typeModel.encrypted) || isEncryptedValue) && sk != null
+				const fieldPath: string = this.removeNetworkDebuggingSymbolsIfNeeded(patch.attributePath)
+				const needsDecryption = ((isAggregation && typeModel.encrypted) || isEncryptedValue) && instanceDecryptor.isDecryptionPossible()
 				const value = needsDecryption
-					? await this.decryptValueOnPatch(pathResult, encryptedParsedValue, sk, kdfNonce, ownerGroup, instanceDecryptor)
+					? await this.decryptValueOnPatch(pathResult, encryptedParsedValue, ownerGroup, instanceDecryptor, fieldPath)
 					: encryptedParsedValue
 				await this.applyPatchOperation(patch.patchOperation, pathResult, value)
 			} else {
@@ -134,6 +139,16 @@ export class PatchMerger {
 		} catch (e) {
 			throw new PatchOperationError(e)
 		}
+	}
+
+	private removeNetworkDebuggingSymbolsIfNeeded(fieldPath: string) {
+		if (!env.networkDebugging) {
+			return fieldPath
+		}
+		return fieldPath
+			.split("/")
+			.map((pathItem) => pathItem.split(":")[0])
+			.join("/")
 	}
 
 	private async applyPatchOperation(
@@ -268,23 +283,16 @@ export class PatchMerger {
 	private async decryptValueOnPatch(
 		pathResult: PathResult,
 		value: Nullable<EncryptedParsedValue | EncryptedParsedAssociation>,
-		sk: AesKey,
-		kdfNonce: Nullable<Uint8Array>,
 		ownerGroup: Nullable<Id>,
 		instanceDecryptor: InstanceDecryptor,
+		fieldPath: string,
 	): Promise<Nullable<ParsedValue> | Nullable<ParsedAssociation>> {
 		const { typeModel, attributeId } = pathResult
 		const isValue = typeModel.values[attributeId] !== undefined
 		const isAggregation = typeModel.associations[attributeId] !== undefined && typeModel.associations[attributeId].type === AssociationType.Aggregation
 		if (isValue) {
-			const encryptedValueInfo = typeModel.values[attributeId] as ModelValue & { encrypted: true }
-			return this.instancePipeline.cryptoMapper.decryptValue(
-				encryptedValueInfo,
-				value as Base64,
-				instanceDecryptor,
-				ownerGroup,
-				String(encryptedValueInfo.id),
-			)
+			const encryptedValueInfo = typeModel.values[attributeId] as EncryptedModelValue
+			return this.instancePipeline.cryptoMapper.decryptValue(encryptedValueInfo, value as Base64, instanceDecryptor, ownerGroup, fieldPath)
 		} else if (isAggregation) {
 			const encryptedAggregatedEntities = value as Array<ServerModelEncryptedParsedInstance>
 			const modelAssociation = typeModel.associations[attributeId]
@@ -293,10 +301,9 @@ export class PatchMerger {
 			const decryptedAggregates = await this.instancePipeline.cryptoMapper.decryptAggregateAssociation(
 				aggregationTypeModel,
 				encryptedAggregatedEntities,
-				sk,
-				kdfNonce,
+				instanceDecryptor,
 				ownerGroup,
-				`${attributeId}/`,
+				`${fieldPath}/`,
 			)
 			if (this.instancePipeline.cryptoMapper.containErrors(decryptedAggregates)) {
 				// we do not want to apply a patch that failed decryption

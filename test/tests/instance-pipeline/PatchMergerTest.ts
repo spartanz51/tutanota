@@ -1,16 +1,7 @@
 import o, { assertThrows } from "@tutao/otest"
-import {
-	aes256RandomKey,
-	AesKey,
-	CryptoWrapper,
-	VersionedEncryptedKey,
-	VersionedKey,
-	InstanceDecryptor,
-	SymmetricCipherFacade,
-	ValueDecryptor,
-} from "@tutao/crypto"
-import { convertJsToDbType, encryptValue, PatchMerger, PatchOperationError, SessionKeyResolver } from "@tutao/instance-pipeline"
-import { instance, matchers, object, when } from "testdouble"
+import { aes256RandomKey, AesKey, CryptoWrapper, SYMMETRIC_CIPHER_FACADE, SymmetricCipherVersion, VersionedEncryptedKey, VersionedKey } from "@tutao/crypto"
+import { convertJsToDbType, PatchMerger, PatchOperationError, SessionKeyResolver } from "@tutao/instance-pipeline"
+import { instance, object, when } from "testdouble"
 import { KeyLoaderFacade } from "../../../src/common/api/worker/facades/KeyLoaderFacade"
 import { CryptoFacade } from "../../../src/common/api/worker/crypto/CryptoFacade"
 import { UserFacade } from "../../../src/common/api/worker/facades/UserFacade"
@@ -19,8 +10,8 @@ import { ServiceExecutor } from "../../../src/common/api/worker/rest/ServiceExec
 import { CacheStorage, DefaultEntityRestCache } from "../../../src/common/api/worker/rest/DefaultEntityRestCache"
 import { AsymmetricCryptoFacade } from "../../../src/common/api/worker/crypto/AsymmetricCryptoFacade"
 import { KeyRotationFacade } from "../../../src/common/api/worker/facades/KeyRotationFacade"
-import { AttributeModel, Entity, ModelValue, PatchOperationType, ServerModelParsedInstance, sysTypeRefs, tutanotaTypeRefs } from "@tutao/typerefs"
-import { assertNotNull, base64ToUint8Array, downcast, noOp, Nullable, stringToBase64, stringToUtf8Uint8Array } from "@tutao/utils"
+import { AttributeModel, EncryptedModelValue, Entity, PatchOperationType, ServerModelParsedInstance, sysTypeRefs, tutanotaTypeRefs } from "@tutao/typerefs"
+import { assertNotNull, downcast, noOp, Nullable, stringToBase64 } from "@tutao/utils"
 import { RestClient } from "@tutao/rest-client"
 import {
 	clientInitializedTypeModelResolver,
@@ -49,8 +40,6 @@ o.spec("PatchMergerTest", () => {
 	let storage: CacheStorage
 	let customCacheHandlerMap: CustomCacheHandlerMap
 	let cryptoWrapper: CryptoWrapper
-	let valueDecryptor: ValueDecryptor
-	let instanceDecryptor: InstanceDecryptor
 
 	o.beforeEach(async () => {
 		cryptoWrapper = new CryptoWrapper()
@@ -85,11 +74,7 @@ o.spec("PatchMergerTest", () => {
 		ownerGroupKey = { object: aes256RandomKey(), version: 0 }
 		encryptedSessionKey = cryptoWrapper.encryptKeyWithVersionedKey(ownerGroupKey, sk)
 		when(keyLoaderFacadeMock.loadSymGroupKey(ownerGroupId, ownerGroupKey.version)).thenResolve(ownerGroupKey.object)
-		const symmetricCipherFacade: SymmetricCipherFacade = object()
-		patchMerger = new PatchMerger(storage, instancePipeline, typeModelResolver, fixedSessionKeyResolver, symmetricCipherFacade)
-		valueDecryptor = object()
-		instanceDecryptor = object()
-		when(symmetricCipherFacade.getInstanceDecryptor(sk, null, matchers.anything())).thenReturn(instanceDecryptor)
+		patchMerger = new PatchMerger(storage, instancePipeline, typeModelResolver, fixedSessionKeyResolver, SYMMETRIC_CIPHER_FACADE)
 	})
 
 	async function toStorableInstance(entity: Entity): Promise<ServerModelParsedInstance> {
@@ -189,9 +174,11 @@ o.spec("PatchMergerTest", () => {
 			const mailTypeModel = await typeModelResolver.resolveClientTypeReference(tutanotaTypeRefs.MailTypeRef)
 
 			const subjectAttributeId = assertNotNull(AttributeModel.getAttributeId(mailTypeModel, "subject"))
-			const valueType = mailTypeModel.values[subjectAttributeId] as ModelValue & { encrypted: true }
+			const valueType = mailTypeModel.values[subjectAttributeId] as EncryptedModelValue
 			let plaintext = "new subject"
-			let ciphertext = encryptValue(valueType, plaintext, sk)
+			const subKeyInfo = { cipherVersion: SymmetricCipherVersion.AesCbcThenHmac, sessionKey: sk }
+			const subKeyProvider = SYMMETRIC_CIPHER_FACADE.getSubKeyProvider(subKeyInfo, object())
+			let ciphertext = patchMerger.instancePipeline.cryptoMapper.encryptValue(valueType, plaintext, subKeyProvider, "")
 			const patches: Array<sysTypeRefs.Patch> = [
 				sysTypeRefs.createPatch({
 					attributePath: subjectAttributeId.toString(),
@@ -199,8 +186,6 @@ o.spec("PatchMergerTest", () => {
 					patchOperation: PatchOperationType.REPLACE,
 				}),
 			]
-			when(instanceDecryptor.getValueDecryptor(base64ToUint8Array(ciphertext!), matchers.anything())).thenReturn(valueDecryptor)
-			when(valueDecryptor.getValue(matchers.anything())).thenReturn(stringToUtf8Uint8Array(plaintext))
 			const testMailPatchedParsed = assertNotNull(
 				await patchMerger.getPatchedInstanceParsed(tutanotaTypeRefs.MailTypeRef, "listId", "elementId", patches),
 			)
@@ -222,9 +207,11 @@ o.spec("PatchMergerTest", () => {
 			const mailTypeModel = await typeModelResolver.resolveClientTypeReference(tutanotaTypeRefs.MailTypeRef)
 
 			const encryptionAuthStatusAttributeId = assertNotNull(AttributeModel.getAttributeId(mailTypeModel, "encryptionAuthStatus"))
-			const valueType = mailTypeModel.values[encryptionAuthStatusAttributeId] as ModelValue & { encrypted: true }
+			const valueType = mailTypeModel.values[encryptionAuthStatusAttributeId] as EncryptedModelValue
 			const plaintext = EncryptionAuthStatus.TUTACRYPT_AUTHENTICATION_SUCCEEDED
-			const ciphertext = encryptValue(valueType, plaintext, sk)
+			const subKeyInfo = { cipherVersion: SymmetricCipherVersion.AesCbcThenHmac, sessionKey: sk }
+			const subKeyProvider = SYMMETRIC_CIPHER_FACADE.getSubKeyProvider(subKeyInfo, object())
+			const ciphertext = patchMerger.instancePipeline.cryptoMapper.encryptValue(valueType, plaintext, subKeyProvider, "")
 			const patches: Array<sysTypeRefs.Patch> = [
 				sysTypeRefs.createPatch({
 					attributePath: encryptionAuthStatusAttributeId.toString(),
@@ -232,8 +219,6 @@ o.spec("PatchMergerTest", () => {
 					patchOperation: PatchOperationType.REPLACE,
 				}),
 			]
-			when(instanceDecryptor.getValueDecryptor(base64ToUint8Array(ciphertext!), matchers.anything())).thenReturn(valueDecryptor)
-			when(valueDecryptor.getValue(matchers.anything())).thenReturn(stringToUtf8Uint8Array(plaintext))
 			const testMailPatchedParsed = assertNotNull(
 				await patchMerger.getPatchedInstanceParsed(tutanotaTypeRefs.MailTypeRef, "listId", "elementId", patches),
 			)
@@ -255,10 +240,12 @@ o.spec("PatchMergerTest", () => {
 			const mailTypeModel = await typeModelResolver.resolveClientTypeReference(tutanotaTypeRefs.MailTypeRef)
 
 			const encryptionAuthStatusAttributeId = assertNotNull(AttributeModel.getAttributeId(mailTypeModel, "encryptionAuthStatus"))
-			const valueType = mailTypeModel.values[encryptionAuthStatusAttributeId] as ModelValue & { encrypted: true }
+			const valueType = mailTypeModel.values[encryptionAuthStatusAttributeId] as EncryptedModelValue
+			const subKeyInfo = { cipherVersion: SymmetricCipherVersion.AesCbcThenHmac, sessionKey: sk }
+			const subKeyProvider = SYMMETRIC_CIPHER_FACADE.getSubKeyProvider(subKeyInfo, object())
 			const encryptionAuthStatusUntypedValue = convertJsToDbType(
 				mailTypeModel.values[encryptionAuthStatusAttributeId].type,
-				encryptValue(valueType, null, sk),
+				patchMerger.instancePipeline.cryptoMapper.encryptValue(valueType, null, subKeyProvider, ""),
 			) as Nullable<string>
 			const patches: Array<sysTypeRefs.Patch> = [
 				sysTypeRefs.createPatch({
@@ -359,11 +346,13 @@ o.spec("PatchMergerTest", () => {
 
 			const senderAttributeId = assertNotNull(AttributeModel.getAttributeId(mailTypeModel, "sender"))
 			const nameAttributeId = assertNotNull(AttributeModel.getAttributeId(mailAddressTypeModel, "name"))
-			const valueType = mailAddressTypeModel.values[nameAttributeId] as ModelValue & { encrypted: true }
+			const valueType = mailAddressTypeModel.values[nameAttributeId] as EncryptedModelValue
 
 			const pathString = `${senderAttributeId}/senderId/${nameAttributeId}`
 			let plaintext = "new name"
-			const ciphertext = encryptValue(valueType, plaintext, sk)
+			const subKeyInfo = { cipherVersion: SymmetricCipherVersion.AesCbcThenHmac, sessionKey: sk }
+			const subKeyProvider = SYMMETRIC_CIPHER_FACADE.getSubKeyProvider(subKeyInfo, object())
+			const ciphertext = patchMerger.instancePipeline.cryptoMapper.encryptValue(valueType, plaintext, subKeyProvider, "")
 			const patches: Array<sysTypeRefs.Patch> = [
 				sysTypeRefs.createPatch({
 					attributePath: pathString,
@@ -371,8 +360,6 @@ o.spec("PatchMergerTest", () => {
 					patchOperation: PatchOperationType.REPLACE,
 				}),
 			]
-			when(instanceDecryptor.getValueDecryptor(base64ToUint8Array(ciphertext!), matchers.anything())).thenReturn(valueDecryptor)
-			when(valueDecryptor.getValue(matchers.anything())).thenReturn(stringToUtf8Uint8Array(plaintext))
 			const testMailPatchedParsed = assertNotNull(
 				await patchMerger.getPatchedInstanceParsed(tutanotaTypeRefs.MailTypeRef, "listId", "elementId", patches),
 			)

@@ -769,7 +769,7 @@ export async function initLocator(worker: WorkerImpl, browserData: BrowserData) 
 			locator.cryptoWrapper,
 		)
 	})
-	const aesApp = new AesApp(new NativeCryptoFacadeSendDispatcher(worker), random)
+	const aesApp = new AesApp(new NativeCryptoFacadeSendDispatcher(worker))
 	locator.blob = lazyMemoized(async () => {
 		const { BlobFacade } = await import("../../../common/api/worker/facades/lazy/BlobFacade.js")
 		return new BlobFacade(

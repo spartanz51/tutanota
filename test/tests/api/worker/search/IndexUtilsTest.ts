@@ -10,7 +10,7 @@ import {
 import { base64ToUint8Array, byteLength, concat, utf8Uint8ArrayToString } from "@tutao/utils"
 import type { SearchIndexEntry, SearchIndexMetaDataRow } from "../../../../../src/common/api/worker/search/SearchTypes.js"
 import { ClientModelInfo, tutanotaTypeRefs, sysTypeRefs } from "@tutao/typerefs"
-import { aes256RandomKey, aesDecryptUnauthenticated, FIXED_IV } from "@tutao/crypto"
+import { aes256RandomKey, aesDecryptUnauthenticated, FIXED_INITIALIZATION_VECTOR } from "@tutao/crypto"
 import { createTestEntity } from "../../../TestUtils.js"
 import {
 	decryptMetaData,
@@ -25,8 +25,8 @@ import { GroupType } from "../../../../../src/app-env"
 o.spec("Index Utils", () => {
 	o("encryptIndexKey", function () {
 		let key = aes256RandomKey()
-		let encryptedKey = encryptIndexKeyBase64(key, "blubb", FIXED_IV)
-		let decrypted = aesDecryptUnauthenticated(key, concat(FIXED_IV, base64ToUint8Array(encryptedKey)))
+		let encryptedKey = encryptIndexKeyBase64(key, "blubb", FIXED_INITIALIZATION_VECTOR)
+		let decrypted = aesDecryptUnauthenticated(key, concat(FIXED_INITIALIZATION_VECTOR, base64ToUint8Array(encryptedKey)))
 		o(utf8Uint8ArrayToString(decrypted)).equals("blubb")
 	})
 	o("encryptSearchIndexEntry + decryptSearchIndexEntry", function () {
@@ -36,7 +36,7 @@ o.spec("Index Utils", () => {
 			attribute: 84,
 			positions: [12, 536, 3],
 		}
-		let encId = encryptIndexKeyUint8Array(key, entry.id, FIXED_IV)
+		let encId = encryptIndexKeyUint8Array(key, entry.id, FIXED_INITIALIZATION_VECTOR)
 		let encryptedEntry = encryptSearchIndexEntry(key, entry, encId)
 		// attribute 84 => 0x54,
 		// position[0] 12 => 0xC
@@ -45,7 +45,7 @@ o.spec("Index Utils", () => {
 		const encodedIndexEntry = [0x54, 0xc, 0x82, 0x02, 0x18, 0x03]
 		const result = aesDecryptUnauthenticated(key, encryptedEntry.slice(16))
 		o(Array.from(result)).deepEquals(Array.from(encodedIndexEntry))
-		let decrypted = decryptSearchIndexEntry(key, encryptedEntry, FIXED_IV)
+		let decrypted = decryptSearchIndexEntry(key, encryptedEntry, FIXED_INITIALIZATION_VECTOR)
 		o(JSON.stringify(decrypted.encId)).equals(JSON.stringify(encId))
 		const withoutEncId: any = decrypted
 		delete withoutEncId.encId

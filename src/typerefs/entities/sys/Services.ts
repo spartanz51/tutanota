@@ -431,6 +431,15 @@ export const TimelockCaptchaService = Object.freeze({
 	delete: null,
 } as const)
 
+export const UpdateKdfNonceService = Object.freeze({
+	app: "sys",
+	name: "UpdateKdfNonceService",
+	get: null,
+	post: { data: sysTypeRefs.UpdateKdfNoncePostInTypeRef, return: null },
+	put: null,
+	delete: null,
+} as const)
+
 export const UpdatePermissionKeyService = Object.freeze({
 	app: "sys",
 	name: "UpdatePermissionKeyService",

@@ -200,14 +200,14 @@ export class IndexerCore {
 	 * @param indexUpdate IndexUpdate for which {@code create} fields will be populated
 	 */
 	async encryptSearchIndexEntries(id: IdTuple, ownerGroup: Id, keyToIndexEntries: Map<string, SearchIndexEntry[]>, indexUpdate: IndexUpdate): Promise<void> {
-		const { key, iv } = await this.db.encryptionData()
+		const { key, initializationVector } = await this.db.encryptionData()
 		const listId = listIdPart(id)
-		const encInstanceId = encryptIndexKeyUint8Array(key, elementIdPart(id), iv)
+		const encInstanceId = encryptIndexKeyUint8Array(key, elementIdPart(id), initializationVector)
 		const encInstanceIdB64 = uint8ArrayToBase64(encInstanceId)
 		const elementIdTimestamp = generatedIdToTimestamp(elementIdPart(id))
 		const encWordsB64: string[] = []
 		for (const [indexKey, value] of keyToIndexEntries.entries()) {
-			const encWordB64 = encryptIndexKeyBase64(key, indexKey, iv)
+			const encWordB64 = encryptIndexKeyBase64(key, indexKey, initializationVector)
 			encWordsB64.push(encWordB64)
 			const encIndexEntries = getFromMap(indexUpdate.create.indexMap, encWordB64, () => [])
 			for (const indexEntry of value)
@@ -227,8 +227,8 @@ export class IndexerCore {
 	 * Process delete event before applying to the index.
 	 */
 	async _processDeleted(typeRef: TypeRef<any>, instanceId: Id, indexUpdate: IndexUpdate): Promise<void> {
-		const { key, iv } = await this.db.encryptionData()
-		const encInstanceIdPlain = encryptIndexKeyUint8Array(key, instanceId, iv)
+		const { key, initializationVector } = await this.db.encryptionData()
+		const encInstanceIdPlain = encryptIndexKeyUint8Array(key, instanceId, initializationVector)
 		const encInstanceIdB64 = uint8ArrayToBase64(encInstanceIdPlain)
 		const { appId, typeId } = typeRefToTypeInfo(typeRef)
 		const transaction = await this.db.dbFacade.createTransaction(true, [ElementDataOS])
@@ -704,7 +704,7 @@ export class IndexerCore {
 					// Iterate all entries in a block, decrypt id of each and put it into the map
 					iterateBinaryBlocks(binaryBlock, (encSearchIndexEntry) => {
 						const encId = getIdFromEncSearchIndexEntry(encSearchIndexEntry)
-						const decId = decryptIndexKey(encryptionData.key, encId, encryptionData.iv)
+						const decId = decryptIndexKey(encryptionData.key, encId, encryptionData.initializationVector)
 						const timeStamp = generatedIdToTimestamp(decId)
 						getFromMap(timestampToEntries, timeStamp, () => []).push(encSearchIndexEntry)
 					})

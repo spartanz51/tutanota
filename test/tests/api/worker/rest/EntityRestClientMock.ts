@@ -20,6 +20,7 @@ import { clone, downcast, isSameTypeRef, TypeRef } from "@tutao/utils"
 import { AuthDataProvider } from "../../../../../src/common/api/worker/facades/UserFacade.js"
 import { clientInitializedTypeModelResolver, IdGenerator, instancePipelineFromTypeModelResolver } from "../../../TestUtils"
 import { getIds } from "../../../../../src/common/api/worker/rest/RestClientIdUtils"
+import { SymmetricEncryptionScheme } from "@tutao/crypto/symmetric-cipher-facade"
 
 const authDataProvider: AuthDataProvider = {
 	createAuthHeaders(): Dict {
@@ -27,6 +28,9 @@ const authDataProvider: AuthDataProvider = {
 	},
 	isFullyLoggedIn(): boolean {
 		return true
+	},
+	getDefaultSymmetricEncryptionScheme(): SymmetricEncryptionScheme {
+		return SymmetricEncryptionScheme.AesCbc
 	},
 }
 

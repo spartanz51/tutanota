@@ -1,6 +1,4 @@
-import { uint8ArrayToBase64 } from "@tutao/utils"
-import { CryptoError } from "@tutao/crypto/error"
-import { Aes256Key, AesKey, IV_BYTE_LENGTH } from "./symmetric/SymmetricCipherUtils.js"
+import { Aes256Key, AesKey, InitializationVector } from "./symmetric/SymmetricCipherUtils.js"
 import { SYMMETRIC_CIPHER_FACADE } from "./symmetric/SymmetricCipherFacade.js"
 
 /**
@@ -16,11 +14,8 @@ export function aesEncrypt(key: AesKey, bytes: Uint8Array) {
 /**
  * @deprecated use aesEncrypt instead
  */
-export function aesEncryptConfigurationDatabaseItem(key: AesKey, bytes: Uint8Array, iv: Uint8Array): Uint8Array {
-	if (iv.length !== IV_BYTE_LENGTH) {
-		throw new CryptoError(`Illegal IV length: ${iv.length} (expected: ${IV_BYTE_LENGTH}): ${uint8ArrayToBase64(iv)} `)
-	}
-	return SYMMETRIC_CIPHER_FACADE.encryptBytesDeprecatedCustomIv(key, bytes, iv)
+export function aesEncryptConfigurationDatabaseItem(key: AesKey, bytes: Uint8Array, initializationVector: InitializationVector): Uint8Array {
+	return SYMMETRIC_CIPHER_FACADE.encryptBytesDeprecatedCustomIv(key, bytes, initializationVector)
 }
 
 /**
@@ -34,11 +29,8 @@ export function aes256EncryptSearchIndexEntry(key: Aes256Key, bytes: Uint8Array)
 /**
  *@deprecated
  */
-export function aes256EncryptSearchIndexEntryWithIV(key: Aes256Key, bytes: Uint8Array, iv: Uint8Array): Uint8Array {
-	if (iv.length !== IV_BYTE_LENGTH) {
-		throw new CryptoError(`Illegal IV length: ${iv.length} (expected: ${IV_BYTE_LENGTH}): ${uint8ArrayToBase64(iv)} `)
-	}
-	return SYMMETRIC_CIPHER_FACADE.encryptBytesDeprecatedUnauthenticatedCustomIv(key, bytes, iv)
+export function aes256EncryptSearchIndexEntryWithIV(key: Aes256Key, bytes: Uint8Array, initializationVector: InitializationVector): Uint8Array {
+	return SYMMETRIC_CIPHER_FACADE.encryptBytesDeprecatedUnauthenticatedCustomIv(key, bytes, initializationVector)
 }
 
 /**

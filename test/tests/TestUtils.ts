@@ -5,7 +5,7 @@ import { DbFacade, DbTransaction } from "../../src/common/api/worker/search/DbFa
 import { assertNotNull, clone, deepEqual, defer, isNotNull, Thunk, typedEntries, TypeRef } from "@tutao/utils"
 import type { DesktopKeyStoreFacade } from "../../src/common/desktop/DesktopKeyStoreFacade.js"
 import { mock } from "@tutao/otest"
-import { Aes256Key, aes256RandomKey, FIXED_IV, SYMMETRIC_CIPHER_FACADE, SymmetricCipherFacade } from "@tutao/crypto"
+import { Aes256Key, aes256RandomKey, FIXED_INITIALIZATION_VECTOR, SYMMETRIC_CIPHER_FACADE, SymmetricCipherFacade } from "@tutao/crypto"
 import { ScheduledPeriodicId, ScheduledTimeoutId, Scheduler } from "../../src/common/api/common/utils/Scheduler.js"
 import { matchers, object, when } from "testdouble"
 import { Entity, ModelValue, TypeModel } from "@tutao/typerefs"
@@ -41,7 +41,7 @@ export function makeCore(
 	const { transaction } = safeArgs
 	const dbFacade = { createTransaction: () => Promise.resolve(transaction) } as Partial<DbFacade>
 	const defaultDb = new EncryptedDbWrapper(dbFacade as DbFacade)
-	defaultDb.init(safeArgs.encryptionData ?? { key: aes256RandomKey(), iv: FIXED_IV })
+	defaultDb.init(safeArgs.encryptionData ?? { key: aes256RandomKey(), initializationVector: FIXED_INITIALIZATION_VECTOR })
 	const { db, browserData } = {
 		...{ db: defaultDb, browserData: browserDataStub },
 		...safeArgs,

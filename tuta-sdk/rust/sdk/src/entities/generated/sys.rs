@@ -6432,3 +6432,46 @@ impl Entity for SubscriptionReference {
 		}
 	}
 }
+
+#[derive(uniffi::Record, Clone, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "testing"), derive(PartialEq, Debug))]
+pub struct InstanceKdfNonce {
+	#[serde(rename = "2741")]
+	pub _id: Option<CustomId>,
+	#[serde(rename = "2743")]
+	pub instanceList: Option<GeneratedId>,
+	#[serde(rename = "2744")]
+	pub instanceId: GeneratedId,
+	#[serde(rename = "2745")]
+	#[serde(with = "serde_bytes")]
+	pub kdfNonce: Vec<u8>,
+	#[serde(rename = "2742")]
+	pub typeInfo: TypeInfo,
+}
+
+impl Entity for InstanceKdfNonce {
+	fn type_ref() -> TypeRef {
+		TypeRef {
+			app: AppName::Sys,
+			type_id: TypeId::from(2740),
+		}
+	}
+}
+
+#[derive(uniffi::Record, Clone, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "testing"), derive(PartialEq, Debug))]
+pub struct UpdateKdfNoncePostIn {
+	#[serde(rename = "2747")]
+	pub _format: i64,
+	#[serde(rename = "2748")]
+	pub instanceKdfNonce: InstanceKdfNonce,
+}
+
+impl Entity for UpdateKdfNoncePostIn {
+	fn type_ref() -> TypeRef {
+		TypeRef {
+			app: AppName::Sys,
+			type_id: TypeId::from(2746),
+		}
+	}
+}

@@ -4254,3 +4254,34 @@ export type SubscriptionReference = {
 	foreignKey: null | string;
 	subscriptionApp: NumberString;
 }
+export const InstanceKdfNonceTypeRef: TypeRef<InstanceKdfNonce> = new TypeRef("sys", 2740)
+
+export function createInstanceKdfNonce(values: StrippedEntity<InstanceKdfNonce>): InstanceKdfNonce {
+    return Object.assign(create(typeModels[InstanceKdfNonceTypeRef.typeId], InstanceKdfNonceTypeRef), values)
+}
+
+export type InstanceKdfNonce = {
+	_type: TypeRef<InstanceKdfNonce>;
+	_original?: InstanceKdfNonce
+
+	_id: Id;
+	instanceList: null | Id;
+	instanceId: Id;
+	kdfNonce: Uint8Array;
+
+	typeInfo: TypeInfo;
+}
+export const UpdateKdfNoncePostInTypeRef: TypeRef<UpdateKdfNoncePostIn> = new TypeRef("sys", 2746)
+
+export function createUpdateKdfNoncePostIn(values: StrippedEntity<UpdateKdfNoncePostIn>): UpdateKdfNoncePostIn {
+    return Object.assign(create(typeModels[UpdateKdfNoncePostInTypeRef.typeId], UpdateKdfNoncePostInTypeRef), values)
+}
+
+export type UpdateKdfNoncePostIn = {
+	_type: TypeRef<UpdateKdfNoncePostIn>;
+	_original?: UpdateKdfNoncePostIn
+
+	_format: NumberString;
+
+	instanceKdfNonce: InstanceKdfNonce;
+}

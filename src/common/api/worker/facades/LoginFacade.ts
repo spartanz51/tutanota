@@ -74,6 +74,7 @@ import { CacheManagementFacade } from "./lazy/CacheManagementFacade.js"
 import { RolloutFacade } from "./RolloutFacade"
 import { LoginIncompleteError } from "../../common/error/LoginIncompleteError"
 import { ApplicationTypesFacade } from "./ApplicationTypesFacade"
+import { SymmetricEncryptionScheme } from "../../../../crypto/encryption/symmetric/SymmetricCipherFacade"
 
 assertWorkerOrNode()
 
@@ -187,7 +188,7 @@ export class LoginFacade {
 		private readonly keyRotationFacade: KeyRotationFacade,
 		/**
 		 *  Only needed so that we can initialize the offline storage after login.
-		 *  This is necessary because we don't know if we'll be persistent or not until the user tries to login
+		 *  This is necessary because we don't know if we'll be persistent or not until the user tries to log in
 		 *  Once the credential handling has been changed to *always* save in desktop, then this should become obsolete
 		 */
 		private readonly cacheInitializer: CacheStorageLateInitializer,
@@ -216,9 +217,9 @@ export class LoginFacade {
 	}
 
 	/**
-	 * Create session and log in. Changes internal state to refer to the logged in user.
+	 * Create session and log in. Changes internal state to refer to the logged-in user.
 	 * if createSessionOnly == true, the app will not continue to initialize app-specific state
-	 * aftrer the session is created + stored and will also not create a persistent offline DB,
+	 * after the session is created + stored and will also not create a persistent offline DB,
 	 * but still store the database key with the credentials so the offline DB can be created when the
 	 * credentials are first used.
 	 */
@@ -590,7 +591,7 @@ export class LoginFacade {
 				const user = await this.entityClient.load(sysTypeRefs.UserTypeRef, credentials.userId)
 				this.userFacade.setUser(user)
 
-				// Before offline login was enabled (in 3.96.4) we didn't use cache for the login process, only afterwards.
+				// Before offline login was enabled (in 3.96.4) we didn't use cache for the login process, only afterward.
 				// This could lead to a situation where we never loaded or saved user groupInfo but would try to use it now.
 				let userGroupInfo: sysTypeRefs.GroupInfo
 				try {
@@ -853,11 +854,13 @@ export class LoginFacade {
 	 * We do not delete all sessions on the server when changing the external password to avoid that an external user is immediately logged out.
 	 *
 	 * @param user Should be up-to-date, i.e., not loaded from cache, but fresh from the server, otherwise an outdated verifier will cause a logout.
+	 * @param accessToken
+	 * @param userPassphraseKey
 	 */
 	private async checkOutdatedVerifier(user: sysTypeRefs.User, accessToken: string, userPassphraseKey: Aes128Key) {
 		if (uint8ArrayToBase64(user.verifier) !== uint8ArrayToBase64(sha256Hash(createAuthVerifier(userPassphraseKey)))) {
 			console.log("Auth verifier has changed")
-			// delete the obsolete session to make sure it can not be used any more
+			// delete the obsolete session to make sure it can not be used anymore
 			await this.deleteSession(accessToken).catch((e) => console.error("Could not delete session", e))
 			await this.resetSession()
 			throw new restError.NotAuthenticatedError("Auth verifier has changed")
@@ -882,8 +885,9 @@ export class LoginFacade {
 	}
 
 	/**
-	 * We use the accessToken that should be deleted for authentication. Therefore it can be invoked while logged in or logged out.
+	 * We use the accessToken that should be deleted for authentication. Therefore, it can be invoked while logged in or logged out.
 	 *
+	 * @param accessToken
 	 * @param pushIdentifier identifier associated with this device, if any, to delete PushIdentifier on the server
 	 */
 	async deleteSession(accessToken: Base64Url, pushIdentifier: string | null = null): Promise<void> {
@@ -944,7 +948,7 @@ export class LoginFacade {
 			})
 			.then(async (instance) => {
 				const untypedSession = AttributeModel.removeNetworkDebuggingInfoIfNeeded<ServerModelUntypedInstance>(JSON.parse(instance))
-				// Intentionally passing an UntypedInstance to AttributeModel to circumvent sessionkey resolution during login.
+				// Intentionally passing an UntypedInstance to AttributeModel to circumvent session key resolution during login.
 				const accessKey = AttributeModel.getAttributeorNull<Base64>(untypedSession, "accessKey", SessionTypeModel)
 				const userId = AttributeModel.getAttribute<Id[]>(untypedSession, "user", SessionTypeModel)[0]
 				return {
@@ -1062,6 +1066,9 @@ export class LoginFacade {
 			isFullyLoggedIn(): boolean {
 				return false
 			},
+			getDefaultSymmetricEncryptionScheme(): SymmetricEncryptionScheme {
+				return SymmetricEncryptionScheme.AesCbc
+			},
 		}
 		const eventRestClient = new EntityRestClient(
 			tempAuthDataProvider,
@@ -1119,46 +1126,44 @@ export class LoginFacade {
 	}
 
 	/** Deletes second factors using recoverCode as second factor. */
-	resetSecondFactors(mailAddress: string, password: string, recoverCode: Hex): Promise<void> {
-		return this.loadUserPassphraseKey(mailAddress, password).then((passphraseReturn) => {
-			const authVerifier = createAuthVerifierAsBase64Url(passphraseReturn.userPassphraseKey)
+	async resetSecondFactors(mailAddress: string, password: string, recoverCode: Hex): Promise<void> {
+		const passphraseReturn = await this.loadUserPassphraseKey(mailAddress, password)
+		const authVerifier = createAuthVerifierAsBase64Url(passphraseReturn.userPassphraseKey)
+		const recoverCodeKey = uint8ArrayToKey(hexToUint8Array(recoverCode))
+		const recoverCodeVerifier = createAuthVerifierAsBase64Url(recoverCodeKey)
+		const deleteData = sysTypeRefs.createResetFactorsDeleteData({
+			mailAddress,
+			authVerifier,
+			recoverCodeVerifier,
+		})
+		return await this.serviceExecutor.delete(sysServices.ResetFactorsService, deleteData)
+	}
+
+	async takeOverDeletedAddress(mailAddress: string, password: string, recoverCode: Hex | null, targetAccountMailAddress: string): Promise<void> {
+		const passphraseReturn = await this.loadUserPassphraseKey(mailAddress, password)
+		const authVerifier = createAuthVerifierAsBase64Url(passphraseReturn.userPassphraseKey)
+		let recoverCodeVerifier: Base64 | null = null
+		if (recoverCode) {
 			const recoverCodeKey = uint8ArrayToKey(hexToUint8Array(recoverCode))
-			const recoverCodeVerifier = createAuthVerifierAsBase64Url(recoverCodeKey)
-			const deleteData = sysTypeRefs.createResetFactorsDeleteData({
-				mailAddress,
-				authVerifier,
-				recoverCodeVerifier,
-			})
-			return this.serviceExecutor.delete(sysServices.ResetFactorsService, deleteData)
+			recoverCodeVerifier = createAuthVerifierAsBase64Url(recoverCodeKey)
+		}
+		let data = sysTypeRefs.createTakeOverDeletedAddressData({
+			mailAddress,
+			authVerifier,
+			recoverCodeVerifier,
+			targetAccountMailAddress,
 		})
+		return await this.serviceExecutor.post(sysServices.TakeOverDeletedAddressService, data)
 	}
 
-	takeOverDeletedAddress(mailAddress: string, password: string, recoverCode: Hex | null, targetAccountMailAddress: string): Promise<void> {
-		return this.loadUserPassphraseKey(mailAddress, password).then((passphraseReturn) => {
-			const authVerifier = createAuthVerifierAsBase64Url(passphraseReturn.userPassphraseKey)
-			let recoverCodeVerifier: Base64 | null = null
-
-			if (recoverCode) {
-				const recoverCodeKey = uint8ArrayToKey(hexToUint8Array(recoverCode))
-				recoverCodeVerifier = createAuthVerifierAsBase64Url(recoverCodeKey)
-			}
-
-			let data = sysTypeRefs.createTakeOverDeletedAddressData({
-				mailAddress,
-				authVerifier,
-				recoverCodeVerifier,
-				targetAccountMailAddress,
-			})
-			return this.serviceExecutor.post(sysServices.TakeOverDeletedAddressService, data)
-		})
+	async generateTotpSecret(): Promise<TotpSecret> {
+		const totp = await this.getTotpVerifier()
+		return totp.generateSecret()
 	}
 
-	generateTotpSecret(): Promise<TotpSecret> {
-		return this.getTotpVerifier().then((totp) => totp.generateSecret())
-	}
-
-	generateTotpCode(time: number, key: Uint8Array): Promise<number> {
-		return this.getTotpVerifier().then((totp) => totp.generateTotp(time, key))
+	async generateTotpCode(time: number, key: Uint8Array): Promise<number> {
+		const totp = await this.getTotpVerifier()
+		return totp.generateTotp(time, key)
 	}
 
 	private getTotpVerifier(): Promise<TotpVerifier> {
