@@ -65,7 +65,7 @@ export default defineConfig([
 				{
 					patterns: [
 						{
-							group: ["**src/crypto**", "**../crypto**"],
+							group: ["**src/crypto**", "../crypto**", "**/../crypto**"],
 							message:
 								"Do not import from crypto internals directly. Use the public api under @tutao/crypto such as the `SymmetricCipherFacade` instead.",
 						},
