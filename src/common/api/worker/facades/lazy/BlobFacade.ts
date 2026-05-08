@@ -14,16 +14,28 @@ import {
 	noOp,
 	promiseMap,
 	splitUint8ArrayInChunks,
+	TypeRef,
 	uint8ArrayToBase64,
 	uint8ArrayToString,
 } from "@tutao/utils"
-import { ArchiveDataType, assertWorkerOrNode, CANCEL_UPLOAD_EVENT, isApp, isDesktop, ProgrammingError } from "@tutao/app-env"
-import { AttributeModel, ServerModelUntypedInstance, SomeEntity, storageServices, storageTypeModels, storageTypeRefs, sysTypeRefs } from "@tutao/typerefs"
+import { ArchiveDataType, assertWorkerOrNode, isApp, isDesktop, ProgrammingError } from "@tutao/app-env"
+import {
+	AttributeModel,
+	BlobElementEntity,
+	ServerModelEncryptedParsedInstance,
+	ServerModelUntypedInstance,
+	SomeEntity,
+	storageServices,
+	storageTypeModels,
+	storageTypeRefs,
+	sysTypeRefs,
+	TypeModelResolver,
+} from "@tutao/typerefs"
 import { _encryptBytes, aesDecrypt, AesKey, asyncDecryptBytes, sha256Hash } from "@tutao/crypto"
 import type { FileUri, NativeFileApp } from "../../../../native/common/FileApp.js"
 import type { AesApp } from "../../../../native/worker/AesApp.js"
 import { FileReference, splitFileIntoChunks } from "../../../common/utils/FileUtils.js"
-import { doBlobRequestWithRetry, tryServers } from "../../rest/EntityRestClient.js"
+import { doBlobRequestWithRetry, tryServers, typeModelToRestPath } from "../../rest/EntityRestClient.js"
 import { BlobAccessTokenFacade } from "../BlobAccessTokenFacade.js"
 import { InstancePipeline } from "@tutao/instance-pipeline"
 import { BlobReferencingInstance } from "../../../common/utils/BlobUtils.js"
@@ -31,6 +43,7 @@ import { CryptoError } from "@tutao/crypto/error"
 import { TransferId, UploadProgressInfo } from "../../../common/drive/DriveTypes"
 import { CancelledError } from "../../../common/error/CancelledError"
 import { TransferProgressDispatcher } from "../../../main/TransferProgressDispatcher"
+import { SuspensionBehavior } from "../../../../../rest-client/SuspensionHandler"
 
 assertWorkerOrNode()
 export const BLOB_SERVICE_REST_PATH = `/rest/${storageServices.BlobService.app}/${storageServices.BlobService.name.toLowerCase()}`
@@ -97,6 +110,7 @@ export class BlobFacade {
 		private readonly cryptoFacade: CryptoFacade,
 		private readonly blobAccessTokenFacade: BlobAccessTokenFacade,
 		private readonly progressDispatcher: TransferProgressDispatcher,
+		private readonly typeModelResolver: TypeModelResolver,
 	) {}
 
 	/**
@@ -323,6 +337,56 @@ export class BlobFacade {
 			offset += data.length
 		}
 		return resultBuffer
+	}
+
+	/**
+	 * Download a full archive of (encrypted) blob entities.
+	 *
+	 * To decrypt the entities, you will have to call {@link CryptoMapper#decryptParsedInstance}.
+	 */
+	async downloadFullEncryptedBlobElementEntityArchive<T extends BlobElementEntity>(
+		typeRef: TypeRef<T>,
+		archiveId: Id,
+	): Promise<ServerModelEncryptedParsedInstance[]> {
+		const clientTypeModel = await this.typeModelResolver.resolveClientTypeReference(typeRef)
+		const headers: Dict = {
+			v: String(clientTypeModel.version),
+		}
+
+		if (clientTypeModel.dependsOnVersion) {
+			headers.dv = String(clientTypeModel.dependsOnVersion)
+		}
+
+		const blobServerAccessInfo = await this.blobAccessTokenFacade.requestReadTokenArchive(archiveId)
+		const allParams = await this.blobAccessTokenFacade.createQueryParams(blobServerAccessInfo, {}, typeRef)
+		const serversToTry = blobServerAccessInfo.servers
+
+		// blob element types are accessed with a specific rest path
+		const path = `${typeModelToRestPath(clientTypeModel)}/${archiveId}`
+
+		const t = () =>
+			tryServers(
+				serversToTry,
+				async (serverUrl) =>
+					this.restClient.request(path, HttpMethod.GET, {
+						queryParams: allParams,
+						headers: {}, // prevent CORS request due to non standard header usage
+						responseType: MediaType.Json,
+						baseUrl: serverUrl,
+						noCORS: true,
+						suspensionBehavior: SuspensionBehavior.Suspend,
+					}),
+				`can't load instances from server `,
+			)
+
+		const serverTypeModel = await this.typeModelResolver.resolveServerTypeReference(typeRef)
+		const doEvictToken = () => this.blobAccessTokenFacade.evictArchiveToken(archiveId)
+		const json = JSON.parse(await doBlobRequestWithRetry(t, doEvictToken)) as ServerModelUntypedInstance[]
+
+		return await promiseMap(json, async (instance) => {
+			const noNetworkDebugInstance = AttributeModel.removeNetworkDebuggingInfoIfNeeded<ServerModelUntypedInstance>(instance)
+			return await this.instancePipeline.typeMapper.applyJsTypes(serverTypeModel, noNetworkDebugInstance)
+		})
 	}
 
 	/**

@@ -20,7 +20,6 @@ import {
 	isIOSApp,
 	isOfflineStorageAvailable,
 	isTest,
-	Mode,
 	ProgrammingError,
 } from "@tutao/app-env"
 import type { BrowserData } from "../../../common/misc/ClientConstants.js"
@@ -781,6 +780,7 @@ export async function initLocator(worker: WorkerImpl, browserData: BrowserData) 
 			locator.crypto,
 			locator.blobAccessToken,
 			mainInterface.uploadProgressListener,
+			typeModelResolver,
 		)
 	})
 	locator.mail = lazyMemoized(async () => {
