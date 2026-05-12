@@ -118,6 +118,7 @@ import {
 } from "../../../common/api/worker/LastProcessedEventBatchStorageFacade"
 import { OfflineStorage } from "../../../common/api/worker/offline/OfflineStorage"
 import { UpdateAppTypesHashMiddleware } from "../../../common/api/common/UpdateTypesHashMiddleware"
+import { WebMailIndexer } from "../index/WebMailIndexer"
 
 assertWorkerOrNode()
 
@@ -284,23 +285,16 @@ export async function initLocator(worker: WorkerImpl, browserData: BrowserData) 
 	})
 
 	const mailIndexer = lazyMemoized(async () => {
-		const { IndexedDbMailIndexerBackend } = await import("../index/IndexedDbMailIndexerBackend")
-		const { OfflineStorageMailIndexerBackend } = await import("../index/OfflineStorageMailIndexerBackend")
-		const { WebMailIndexer } = await import("../index/WebMailIndexer.js")
-		const bulkLoaderFactory = await prepareBulkLoaderFactory()
-		const dateProvider = new LocalTimeDateProvider()
-		const mailFacade = await locator.mail()
 		if (isOfflineStorageAvailable()) {
+			// FIXME: Do we need the OfflineStorageMailIndexerBackend? We can probably delete it if not...
+			const { OfflineMailIndexer } = await import("../index/OfflineMailIndexer.js")
 			const persistence = await offlineStorageIndexerPersistence()
-			return new WebMailIndexer(
-				mainInterface.infoMessageHandler,
-				bulkLoaderFactory,
-				locator.cachingEntityClient,
-				dateProvider,
-				mailFacade,
-				() => new OfflineStorageMailIndexerBackend(persistence),
-			)
+			return new OfflineMailIndexer(persistence, locator.blob, locator.cachingEntityClient)
 		} else {
+			const dateProvider = new LocalTimeDateProvider()
+			const mailFacade = await locator.mail()
+			const { IndexedDbMailIndexerBackend } = await import("../index/IndexedDbMailIndexerBackend")
+			const { WebMailIndexer } = await import("../index/WebMailIndexer.js")
 			const core = await indexerCore()
 			return new WebMailIndexer(
 				mainInterface.infoMessageHandler,
@@ -487,13 +481,18 @@ export async function initLocator(worker: WorkerImpl, browserData: BrowserData) 
 		} else {
 			const { IndexedDbIndexer } = await import("../index/IndexedDbIndexer.js")
 			const core = await indexerCore()
+			const indexer = await mailIndexer()
+			if (!(indexer instanceof WebMailIndexer)) {
+				throw new ProgrammingError("indexeddbindexer must use web mail indexer")
+			}
+
 			return new IndexedDbIndexer(
 				serverDateProvider,
 				await db(),
 				core,
 				mainInterface.infoMessageHandler,
 				locator.cachingEntityClient,
-				await mailIndexer(),
+				indexer,
 				contact,
 				typeModelResolver,
 				locator.keyLoader,

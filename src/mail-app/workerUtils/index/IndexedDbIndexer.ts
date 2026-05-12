@@ -16,7 +16,6 @@ import { filterIndexMemberships } from "../../../common/api/common/utils/IndexUt
 import type { GroupData } from "../../../common/api/worker/search/SearchTypes.js"
 import { IndexingErrorReason } from "../../../common/api/worker/search/SearchTypes.js"
 import { ContactIndexer } from "./ContactIndexer.js"
-import { MailIndexer } from "./MailIndexer.js"
 import { IndexerCore } from "./IndexerCore.js"
 import { DbError } from "../../../common/api/common/error/DbError.js"
 import type { QueuedBatch } from "../../../common/api/worker/EventQueue.js"
@@ -56,6 +55,7 @@ import { EncryptedDbWrapper } from "../../../common/api/worker/search/EncryptedD
 import { DateProvider } from "../../../common/api/common/DateProvider"
 import { IndexingNotSupportedError } from "../../../common/api/common/error/IndexingNotSupportedError"
 import { OutOfSyncError } from "../../../common/api/common/error/OutOfSyncError"
+import { WebMailIndexer } from "./WebMailIndexer"
 
 export type InitParams = {
 	user: sysTypeRefs.User
@@ -135,7 +135,7 @@ export class IndexedDbIndexer implements Indexer {
 		private readonly core: IndexerCore,
 		private readonly infoMessageHandler: InfoMessageHandler,
 		private readonly entity: EntityClient,
-		private readonly mailIndexer: MailIndexer,
+		private readonly mailIndexer: WebMailIndexer,
 		private readonly contactIndexer: ContactIndexer,
 		private readonly typeModelResolver: ClientTypeModelResolver,
 		private readonly keyLoaderFacade: KeyLoaderFacade,
@@ -480,7 +480,7 @@ export class IndexedDbIndexer implements Indexer {
 
 			await this._processUserEntityEvents(events)
 			await this.processMailEntityEvents(events)
-			await this.mailIndexer.processEntityEvents(events, groupId, batchId)
+			await this.mailIndexer.processEntityEvents(events)
 			await this.contactIndexer.processEntityEvents(events, groupId, batchId)
 			await this.core.putLastBatchIdForGroup(groupId, batchId)
 		} catch (e) {
@@ -583,10 +583,6 @@ export class IndexedDbIndexer implements Indexer {
 		const now = this.serverDateProvider.now()
 
 		await transaction.put(MetaDataOS, Metadata.lastEventIndexTimeMs, now)
-	}
-
-	async resizeMailIndex(_: number) {
-		throw new ProgrammingError("resizeMailIndex can only be called with offline storage")
 	}
 
 	async rebuildMailIndex() {

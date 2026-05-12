@@ -26,6 +26,7 @@ import { isDraft } from "../../mail/model/MailChecks.js"
 import { BulkMailLoader, MAIL_INDEXER_CHUNK } from "./BulkMailLoader.js"
 import { cryptoUtils } from "@tutao/crypto"
 import { MailIndexerBackend, MailWithDetailsAndAttachments } from "./MailIndexerBackend"
+import { MailIndexer } from "./MailIndexer"
 
 assertWorkerOrNode()
 
@@ -39,7 +40,7 @@ const enum MailIndexingAbortReason {
 
 const TAG = "WebMailIndexer"
 
-export class WebMailIndexer {
+export class WebMailIndexer implements MailIndexer {
 	// {@link currentIndexTimestamp}: the **oldest** timestamp that has been indexed for all mail lists
 	// There are two scenarios in which new mails are indexed:
 	// a) a new mail (internal/external) is received from our mail server
@@ -669,6 +670,10 @@ export class WebMailIndexer {
 		await this.backend.resetIndex()
 		await this.updateCurrentIndexTimestamp(user)
 		await this.indexMailboxes(user, currentIndexTimestamp)
+	}
+
+	async extendMailIndex(): Promise<void> {
+		// no-op on web
 	}
 }
 
