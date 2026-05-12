@@ -1,14 +1,14 @@
 import { SqlCipherFacade } from "../../../common/native/common/generatedipc/SqlCipherFacade"
 import { sql } from "../../../common/api/worker/offline/Sql"
 import { SqlValue, untagSqlObject, untagSqlValue } from "../../../common/api/worker/offline/SqlValue"
-import { NOTHING_INDEXED_TIMESTAMP } from "@tutao/app-env"
+import { GroupType, NOTHING_INDEXED_TIMESTAMP, ProgrammingError } from "@tutao/app-env"
 import { MailWithDetailsAndAttachments } from "./MailIndexerBackend"
-import { getTypeString, TypeRef } from "@tutao/utils"
-import { elementIdPart, ListElementEntity, listIdPart, tutanotaTypeRefs } from "@tutao/typerefs"
+import { assertNotNull, getTypeString, TypeRef } from "@tutao/utils"
+import { elementIdPart, ListElementEntity, listIdPart, ServerModelEncryptedParsedInstance, ServerTypeModel, tutanotaTypeRefs, Type } from "@tutao/typerefs"
 import { htmlToText } from "../../../common/api/common/utils/IndexUtils"
 import { getMailBodyText } from "../../../common/api/common/CommonMailUtils"
-import type { OfflineStorageTable } from "../../../common/api/worker/offline/OfflineStorage"
-import { GroupType } from "@tutao/app-env"
+import { customTypeDecoders, customTypeEncoders, OfflineStorageTable } from "../../../common/api/worker/offline/OfflineStorage"
+import { decode, encode } from "cborg"
 
 export const SearchTableDefinitions: Record<string, OfflineStorageTable> = Object.freeze({
 	search_group_data: {
@@ -59,6 +59,15 @@ export const SearchTableDefinitions: Record<string, OfflineStorageTable> = Objec
                   lastName,
                   mailAddresses
               )`,
+		purgedWithCache: true,
+	},
+
+	// Encrypted, encoded mail details blobs.
+	//
+	// This is for temporary storage to avoid storing all of the user's archives in RAM (which can potentially fail).
+	encrypted_mail_details_blobs: {
+		definition:
+			"CREATE TABLE IF NOT EXISTS encrypted_mail_details_blobs (blobId TEXT NOT NULL PRIMARY KEY, archiveId TEXT NOT NULL, data BLOB NOT NULL, typeref STRING NOT NULL, modelVersion NUMBER NOT NULL)",
 		purgedWithCache: true,
 	},
 })
@@ -247,6 +256,70 @@ export class OfflineStoragePersistence {
         ${indexed ? 1 : 0}
         )`
 		await this.sqlCipherFacade.run(query, params)
+	}
+
+	async storeEncryptedBlobs(serverTypeModel: ServerTypeModel, blobs: readonly ServerModelEncryptedParsedInstance[]): Promise<void> {
+		const typeref = `${serverTypeModel.app}/${serverTypeModel.name}`
+		if (serverTypeModel.type !== Type.BlobElement) {
+			throw new ProgrammingError(`cannot use OfflineStoragePersistence#storeEncryptedBlobs with ${serverTypeModel.type} (${typeref})`)
+		}
+
+		const idIndex = assertNotNull(Object.values(serverTypeModel.values).find((v) => v.name === "_id")).id
+
+		for (const blob of blobs) {
+			const [archiveId, blobId] = assertNotNull(blob[idIndex]) as IdTuple
+			const encodedBlob = encode(blob, { typeEncoders: customTypeEncoders })
+			const { query, params } = sql`INSERT
+			OR REPLACE INTO encrypted_mail_details_blobs (blobId, archiveId, data, typeref, modelVersion) VALUES (
+			${blobId},
+			${archiveId},
+			${encodedBlob},
+			${typeref},
+			${serverTypeModel.version}
+			)`
+			await this.sqlCipherFacade.run(query, params)
+		}
+	}
+
+	async retrieveEncryptedBlob(serverTypeModel: ServerTypeModel, blobId: Id): Promise<ServerModelEncryptedParsedInstance | null> {
+		const typeref = `${serverTypeModel.app}/${serverTypeModel.name}`
+		if (serverTypeModel.type !== Type.BlobElement) {
+			throw new ProgrammingError(`cannot use OfflineStoragePersistence#retrieveEncryptedBlob with ${serverTypeModel.type} (${typeref})`)
+		}
+
+		const { query, params } = sql`SELECT data
+				FROM encrypted_mail_details_blobs
+				WHERE blobId = ${blobId}
+				  AND typeref = ${typeref}
+				  AND modelVersion = ${serverTypeModel.version}`
+
+		const blobs = await this.sqlCipherFacade.get(query, params)
+		if (blobs == null) {
+			return null
+		}
+
+		const data = untagSqlObject(blobs).data
+		if (!(data instanceof Uint8Array)) {
+			return null
+		}
+
+		return decode(data, { tags: customTypeDecoders })
+	}
+
+	async deleteEncryptedBlob(blobId: Id): Promise<void> {
+		{
+			const { query, params } = sql`DELETE
+										  FROM encrypted_mail_details_blobs WHERE blobId = ${blobId}`
+			await this.sqlCipherFacade.run(query, params)
+		}
+	}
+
+	async clearEncryptedBlobs(): Promise<void> {
+		{
+			const { query, params } = sql`DELETE
+										  FROM encrypted_mail_details_blobs`
+			await this.sqlCipherFacade.run(query, params)
+		}
 	}
 
 	private async getRowid<T extends ListElementEntity>(typeRef: TypeRef<T>, id: IdTuple): Promise<SqlValue | null> {
