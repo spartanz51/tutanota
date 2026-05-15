@@ -23,7 +23,7 @@ import {
 } from "@tutao/typerefs"
 import { arrayOf, assertNotNull, clone, deepEqual, downcast, isSameTypeRef, last, Nullable, promiseMap, stringToBase64UrlCustomId, TypeRef } from "@tutao/utils"
 import { CacheStorage, DefaultEntityRestCache, EXTEND_RANGE_MIN_CHUNK_SIZE } from "../../../../../src/common/api/worker/rest/DefaultEntityRestCache.js"
-import { OfflineStorage, OfflineStorageCleaner } from "../../../../../src/common/api/worker/offline/OfflineStorage.js"
+import { OfflineStorage } from "../../../../../src/common/api/worker/offline/OfflineStorage.js"
 import { NoZoneDateProvider } from "../../../../../src/common/api/common/utils/NoZoneDateProvider.js"
 import { RestClient, restError } from "@tutao/rest-client"
 import { EphemeralCacheStorage } from "../../../../../src/common/api/worker/rest/EphemeralCacheStorage.js"
@@ -63,14 +63,11 @@ async function getOfflineStorage(userId: Id, handlerMap: CustomCacheHandlerMap):
 	const sqlCipherFacade = new PerWindowSqlCipherFacade(odbRefCounter)
 	await sqlCipherFacade.openDb(userId, offlineDatabaseTestKey)
 	const interWindowEventSender = instance(InterWindowEventFacadeSendDispatcher)
-	const offlineStorageCleanerMock = object<OfflineStorageCleaner>()
 	const typeModelResolver = clientInitializedTypeModelResolver()
 	const offlineStorage = new OfflineStorage(
 		sqlCipherFacade,
 		interWindowEventSender,
-		new NoZoneDateProvider(),
 		migratorMock,
-		offlineStorageCleanerMock,
 		modelMapperFromTypeModelResolver(typeModelResolver),
 		typeModelResolver,
 		handlerMap,
@@ -79,7 +76,6 @@ async function getOfflineStorage(userId: Id, handlerMap: CustomCacheHandlerMap):
 	await offlineStorage.init({
 		userId,
 		databaseKey: offlineDatabaseTestKey,
-		timeRangeDate: new Date("2025-03-21T12:33:40.972Z"),
 		forceNewDatabase: false,
 	})
 	return offlineStorage

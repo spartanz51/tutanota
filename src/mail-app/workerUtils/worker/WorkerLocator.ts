@@ -75,7 +75,6 @@ import { KeyCache } from "../../../common/api/worker/facades/KeyCache.js"
 import { InstancePipeline, PatchMerger, SessionKeyResolver } from "@tutao/instance-pipeline"
 import { RecoverCodeFacade } from "../../../common/api/worker/facades/lazy/RecoverCodeFacade.js"
 import { CacheManagementFacade } from "../../../common/api/worker/facades/lazy/CacheManagementFacade.js"
-import { MailOfflineCleaner } from "../offline/MailOfflineCleaner.js"
 import { Credentials } from "../../../common/misc/credentials/Credentials.js"
 import { AsymmetricCryptoFacade } from "../../../common/api/worker/crypto/AsymmetricCryptoFacade.js"
 import { KeyVerificationFacade } from "../../../common/api/worker/facades/lazy/KeyVerificationFacade"
@@ -289,7 +288,17 @@ export async function initLocator(worker: WorkerImpl, browserData: BrowserData) 
 			// FIXME: Do we need the OfflineStorageMailIndexerBackend? We can probably delete it if not...
 			const { OfflineMailIndexer } = await import("../index/OfflineMailIndexer.js")
 			const persistence = await offlineStorageIndexerPersistence()
-			return new OfflineMailIndexer(persistence, locator.blob, locator.cachingEntityClient)
+			return new OfflineMailIndexer(
+				persistence,
+				locator.blob,
+				locator.cachingEntityClient,
+				locator.mail,
+				locator.crypto,
+				locator.instancePipeline,
+				typeModelResolver,
+				locator.instancePipeline.modelMapper,
+				mainInterface.infoMessageHandler,
+			)
 		} else {
 			const dateProvider = new LocalTimeDateProvider()
 			const mailFacade = await locator.mail()
@@ -358,9 +367,7 @@ export async function initLocator(worker: WorkerImpl, browserData: BrowserData) 
 			return new OfflineStorage(
 				locator.sqlCipherFacade,
 				new InterWindowEventFacadeSendDispatcher(worker),
-				dateProvider,
 				new OfflineStorageMigrator(OFFLINE_STORAGE_MIGRATIONS, locator.applicationTypesFacade),
-				new MailOfflineCleaner(),
 				locator.instancePipeline.modelMapper,
 				typeModelResolver,
 				customCacheHandler,
@@ -961,11 +968,4 @@ export async function resetLocator(): Promise<void> {
 
 if (typeof self !== "undefined") {
 	;(self as unknown as WorkerGlobalScope).locator = locator // export in worker scope
-}
-
-/*
- * @returns true if webassembly is supported
- */
-export function isWebAssemblySupported() {
-	return typeof WebAssembly === "object" && typeof WebAssembly.instantiate === "function"
 }

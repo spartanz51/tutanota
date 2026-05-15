@@ -1,6 +1,5 @@
-import o from "@tutao/otest"
+import o, { verify } from "@tutao/otest"
 import { func, instance, object, when } from "testdouble"
-import { verify } from "@tutao/otest"
 import { LateInitializedCacheStorageImpl, OfflineStorageArgs } from "../../../../../src/common/api/worker/rest/CacheStorageProxy.js"
 import { OfflineStorage } from "../../../../../src/common/api/worker/offline/OfflineStorage.js"
 import { WorkerImpl } from "../../../../../src/mail-app/workerUtils/worker/WorkerImpl.js"
@@ -40,7 +39,6 @@ o.spec("CacheStorageProxy", function () {
 				type: "offline",
 				userId,
 				databaseKey,
-				timeRangeDate: null,
 				forceNewDatabase: false,
 			})
 
@@ -62,7 +60,6 @@ o.spec("CacheStorageProxy", function () {
 				type: "offline",
 				userId,
 				databaseKey,
-				timeRangeDate: null,
 				forceNewDatabase: false,
 			})
 
@@ -83,7 +80,6 @@ o.spec("CacheStorageProxy", function () {
 				type: "offline",
 				userId,
 				databaseKey,
-				timeRangeDate: null,
 				forceNewDatabase: false,
 			}
 			when(offlineStorageMock.init(args)).thenResolve(true)
@@ -99,7 +95,6 @@ o.spec("CacheStorageProxy", function () {
 				type: "offline",
 				userId,
 				databaseKey,
-				timeRangeDate: null,
 				forceNewDatabase: false,
 			}
 			when(offlineStorageMock.init(args)).thenResolve(false)
@@ -118,7 +113,6 @@ o.spec("CacheStorageProxy", function () {
 				type: "offline",
 				userId,
 				databaseKey,
-				timeRangeDate: null,
 				forceNewDatabase: false,
 			})
 

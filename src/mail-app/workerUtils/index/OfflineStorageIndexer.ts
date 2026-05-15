@@ -68,7 +68,7 @@ export class OfflineStorageIndexer implements Indexer {
 	}
 
 	async extendMailIndex() {
-		await this.mailIndexer.extendMailIndex()
+		await this.mailIndexer.extendMailIndex(assertNotNull(this.userFacade.getUser()))
 	}
 
 	async deleteIndex() {

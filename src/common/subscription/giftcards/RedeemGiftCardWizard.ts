@@ -27,7 +27,7 @@ import { SessionType } from "../../api/common/SessionType.js"
 import * as restError from "@tutao/rest-client/error"
 import { GiftCardFacade } from "../../api/worker/facades/lazy/GiftCardFacade.js"
 import { EntityClient } from "../../api/common/EntityClient.js"
-import { countryList } from "@tutao/app-env"
+import { countryList, PaymentMethodType, PlanType } from "@tutao/app-env"
 import { renderCountryDropdown } from "../../gui/base/GuiUtils.js"
 import { UpgradePriceType } from "../FeatureListProvider"
 import { SecondFactorHandler } from "../../misc/2fa/SecondFactorHandler.js"
@@ -35,7 +35,6 @@ import { PrimaryButton } from "../../gui/base/buttons/VariantButtons.js"
 import { CredentialsInfo } from "../../native/common/generatedipc/CredentialsInfo.js"
 import { signup } from "../utils/PaymentUtils"
 import { MessageBanner } from "../../gui/base/MessageBanner"
-import { PaymentMethodType, PlanType } from "@tutao/app-env"
 
 const enum GetCredentialsMethod {
 	Login,
@@ -111,7 +110,7 @@ class RedeemGiftCardModel {
 			const credentials = await this.credentialsProvider.getDecryptedCredentialsByUserId(encryptedCredentials.userId)
 
 			if (credentials) {
-				await this.logins.resumeSession(credentials, null, null)
+				await this.logins.resumeSession(credentials, null)
 				await this.postLogin()
 			}
 		}

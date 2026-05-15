@@ -73,7 +73,6 @@ import { KeyCache } from "../../../common/api/worker/facades/KeyCache.js"
 import { RecoverCodeFacade } from "../../../common/api/worker/facades/lazy/RecoverCodeFacade.js"
 import { CacheManagementFacade } from "../../../common/api/worker/facades/lazy/CacheManagementFacade.js"
 import { CalendarWorkerImpl } from "./CalendarWorkerImpl.js"
-import { CalendarOfflineCleaner } from "../offline/CalendarOfflineCleaner.js"
 import { Credentials } from "../../../common/misc/credentials/Credentials.js"
 import { AsymmetricCryptoFacade } from "../../../common/api/worker/crypto/AsymmetricCryptoFacade.js"
 import { InstancePipeline, PatchMerger, SessionKeyResolver } from "@tutao/instance-pipeline"
@@ -250,9 +249,7 @@ export async function initLocator(worker: CalendarWorkerImpl, browserData: Brows
 			return new OfflineStorage(
 				locator.sqlCipherFacade,
 				new InterWindowEventFacadeSendDispatcher(worker),
-				dateProvider,
 				new OfflineStorageMigrator(OFFLINE_STORAGE_MIGRATIONS, locator.applicationTypesFacade),
-				new CalendarOfflineCleaner(),
 				locator.instancePipeline.modelMapper,
 				typeModelResolver,
 				customCacheHandler,
@@ -675,11 +672,4 @@ export async function resetLocator(): Promise<void> {
 
 if (typeof self !== "undefined") {
 	;(self as unknown as WorkerGlobalScope).locator = locator // export in worker scope
-}
-
-/*
- * @returns true if webassembly is supported
- */
-export function isWebAssemblySupported() {
-	return typeof WebAssembly === "object" && typeof WebAssembly.instantiate === "function"
 }

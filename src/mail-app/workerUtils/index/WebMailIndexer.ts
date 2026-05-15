@@ -1,5 +1,5 @@
 import { assertWorkerOrNode, DAY_IN_MILLIS, FULL_INDEXED_TIMESTAMP, ImportStatus, MailSetKind, NOTHING_INDEXED_TIMESTAMP, OperationType } from "@tutao/app-env"
-import { assertNotNull, clamp, defer, DeferredObject, findAllAndRemove, first, isEmpty, isNotEmpty, isNotNull, newPromise, promiseMap } from "@tutao/utils"
+import { assertNotNull, clamp, defer, DeferredObject, findAllAndRemove, isEmpty, isNotEmpty, isNotNull, newPromise, promiseMap } from "@tutao/utils"
 import {
 	deconstructMailSetEntryId,
 	elementIdPart,
@@ -9,7 +9,6 @@ import {
 	hasError,
 	isFolder,
 	isSameId,
-	listIdPart,
 	sysTypeRefs,
 	tutanotaTypeRefs,
 } from "@tutao/typerefs"
@@ -24,9 +23,8 @@ import { InfoMessageHandler } from "../../../common/gui/InfoMessageHandler.js"
 import { MailFacade } from "../../../common/api/worker/facades/lazy/MailFacade.js"
 import { isDraft } from "../../mail/model/MailChecks.js"
 import { BulkMailLoader, MAIL_INDEXER_CHUNK } from "./BulkMailLoader.js"
-import { cryptoUtils } from "@tutao/crypto"
 import { MailIndexerBackend, MailWithDetailsAndAttachments } from "./MailIndexerBackend"
-import { MailIndexer } from "./MailIndexer"
+import { downloadNewMailData, MailIndexer } from "./MailIndexer"
 
 assertWorkerOrNode()
 
@@ -94,62 +92,6 @@ export class WebMailIndexer implements MailIndexer {
 		this._mailIndexingEnabled = await this.backend.isMailIndexingEnabled()
 		await this.updateCurrentIndexTimestamp(user)
 		this.initialized.resolve()
-	}
-
-	/** @private visibleForTesting */
-	async downloadNewMailData(mailId: IdTuple): Promise<MailWithDetailsAndAttachments | null> {
-		try {
-			const mail = await this.entityClient.load(tutanotaTypeRefs.MailTypeRef, mailId)
-			// Will be always there, if it was not updated yet, it will still be set by CryptoFacade
-			const mailOwnerEncSessionKey = assertNotNull(mail._ownerEncSessionKey)
-			let mailDetails: tutanotaTypeRefs.MailDetails
-			if (isDraft(mail)) {
-				const mailDetailsDraftId = assertNotNull(mail.mailDetailsDraft)
-				mailDetails = await this.entityClient
-					.loadMultiple(tutanotaTypeRefs.MailDetailsDraftTypeRef, listIdPart(mailDetailsDraftId), [elementIdPart(mailDetailsDraftId)], async () => ({
-						key: mailOwnerEncSessionKey,
-						encryptingKeyVersion: cryptoUtils.parseKeyVersion(mail._ownerKeyVersion ?? "0"),
-					}))
-					.then((d) => {
-						const draft = first(d)
-						if (draft == null) {
-							throw new restError.NotFoundError(`MailDetailsDraft ${mailDetailsDraftId}`)
-						}
-						return draft.details
-					})
-			} else {
-				const mailDetailsBlobId = assertNotNull(mail.mailDetails)
-				mailDetails = await this.entityClient
-					.loadMultiple(tutanotaTypeRefs.MailDetailsBlobTypeRef, listIdPart(mailDetailsBlobId), [elementIdPart(mailDetailsBlobId)], async () => ({
-						key: mailOwnerEncSessionKey,
-						encryptingKeyVersion: cryptoUtils.parseKeyVersion(mail._ownerKeyVersion ?? "0"),
-					}))
-					.then((d) => {
-						const blob = first(d)
-						if (blob == null) {
-							throw new restError.NotFoundError(`MailDetailsBlob ${mailDetailsBlobId}`)
-						}
-						return blob.details
-					})
-			}
-			// we do not use BulkMailLoader here because we actually do want to rely on cache
-			const attachments = await this.mailFacade.loadAttachments(mail)
-			return {
-				mail,
-				mailDetails,
-				attachments,
-			}
-		} catch (e) {
-			if (e instanceof restError.NotFoundError) {
-				console.log("tried to index non existing mail", mailId)
-				return null
-			} else if (e instanceof restError.NotAuthorizedError) {
-				console.log("tried to index mail without permission", mailId)
-				return null
-			} else {
-				throw e
-			}
-		}
 	}
 
 	private async getMailboxIndexDatasForGroups(mailGroups: readonly Id[], oldestTimestamp: number): Promise<MboxIndexData[]> {
@@ -620,7 +562,7 @@ export class WebMailIndexer implements MailIndexer {
 		}
 
 		// At this point, the mail entity, itself, is cached, so when we go to download it again, it will come from cache
-		const newMailData = await this.downloadNewMailData(mailId)
+		const newMailData = await downloadNewMailData(mailId, this.entityClient, this.mailFacade)
 		if (newMailData) {
 			await this.backend.onMailCreated(newMailData)
 		}
@@ -641,7 +583,7 @@ export class WebMailIndexer implements MailIndexer {
 		}
 
 		if (isDraft(updatedMail)) {
-			const newMailData = await this.downloadNewMailData(mailId)
+			const newMailData = await downloadNewMailData(mailId, this.entityClient, this.mailFacade)
 			if (newMailData) {
 				await this.backend.onMailUpdated(newMailData)
 			}
