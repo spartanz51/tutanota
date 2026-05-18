@@ -2311,5 +2311,6 @@ export default {
 		"imapProviderOutlook_label": "Outlook",
 		"imapProviderYahoo_label": "Yahoo",
 		"imapSyncYahooWarning_msg": "Synchronization with Yahoo is not possible. \n Please contact support if you have questions (or link to help desk explaining?)",
+		"imapConfigurationAddLabelInfo_msg": "A label is connected to a color to help you visually find the e-mails faster.",
 	}
 }

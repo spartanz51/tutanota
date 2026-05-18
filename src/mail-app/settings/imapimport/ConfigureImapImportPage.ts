@@ -4,7 +4,7 @@ import { getElementId, tutanotaTypeRefs } from "@tutao/typerefs"
 import { assertNotNull } from "@tutao/utils"
 import { emitWizardEvent, WizardEventType, WizardPageAttrs, WizardPageN } from "../../../common/gui/base/WizardDialog"
 import { TextField } from "../../../common/gui/base/TextField"
-import { lang, TranslationKey } from "../../../common/misc/LanguageViewModel"
+import { lang, MaybeTranslation, TranslationKey } from "../../../common/misc/LanguageViewModel"
 import {
 	importImapAccountToImapAccount,
 	tokenEndpointResponseToTutadbTokenEndpointResponse,
@@ -53,6 +53,8 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 	private shouldDisplayHover: boolean = false
 	private successfullyLoadedMailboxes: boolean = false
 	private hoverPosition: { left: number; top: number } = { left: 0, top: 0 }
+	//Whichever translation this starts with will be changed by the appropriate methods, so initial vaklue isn't visible.
+	private hoverInfo: MaybeTranslation = "imapConfigurationLinkFoldersInfo_msg"
 
 	oncreate(vnode: VnodeDOM<WizardPageAttrs<ImapImportData>>) {
 		this.dom = vnode.dom as HTMLElement
@@ -109,9 +111,7 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 		const shouldAllowContinuing = isFolderMappingCompleted && isLabelCorrectlySet && this.successfullyLoadedMailboxes
 
 		return m(".mt-24", { style: { maxHeight: "65vh" } }, [
-			this.shouldDisplayHover
-				? this.renderHoverInfo(this.hoverPosition.left, this.hoverPosition.top, lang.getTranslationText("imapConfigurationLinkFoldersInfo_msg"))
-				: null,
+			this.shouldDisplayHover ? this.renderHoverInfo(this.hoverPosition.left, this.hoverPosition.top, lang.getTranslationText(this.hoverInfo)) : null,
 			m(
 				".mt-16",
 				m(TitleSection, {
@@ -137,30 +137,9 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 				}),
 				m("", lang.getTranslationText("imapAddLabelToImportedMails_label")),
 				m(IconButton, {
-					icon: Icons.InfoFilled,
+					icon: Icons.QuestionmarkFilled,
 					title: "imapSyncFolderMapping_title",
-					click: (event: MouseEvent) => {
-						const target = event.target as Element
-						const button = target.closest(".icon-button")
-						const dialogWindow = target.closest('[role="dialog"]')
-
-						if (button && dialogWindow) {
-							const targetRect = button.getBoundingClientRect()
-							const dialogRect = dialogWindow.getBoundingClientRect()
-
-							const shiftDistance = 45
-							// When calculating the left distance, it is being considered against the actual left side of screen
-							const hoverWindowLeft = targetRect.left + shiftDistance
-							//This top however is considering the dialog rect as it's start, then we need to do the calculation
-							const hoverWindowTop = targetRect.top - dialogRect.top - shiftDistance
-							this.hoverPosition = {
-								left: hoverWindowLeft,
-								top: hoverWindowTop,
-							}
-
-							this.shouldDisplayHover = !this.shouldDisplayHover
-						}
-					},
+					click: this.updateHoverMessage("imapConfigurationAddLabelInfo_msg"),
 				}),
 			]),
 			this.shouldDisplayLabelField
@@ -224,6 +203,11 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 					disabled: data.isModifyingExistingImport,
 				}),
 				m("", lang.getTranslationText("matchImportFoldersToTutanotaFolders_label")),
+				m(IconButton, {
+					icon: Icons.QuestionmarkFilled,
+					title: "imapSyncFolderMapping_title",
+					click: this.updateHoverMessage("imapConfigurationLinkFoldersInfo_msg"),
+				}),
 			]),
 			this.shouldDisplayFolderTextField
 				? m(TextField, {
@@ -259,6 +243,32 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 				),
 			),
 		])
+	}
+
+	private updateHoverMessage(textMessage: MaybeTranslation) {
+		return (event: MouseEvent) => {
+			const target = event.target as Element
+			const button = target.closest(".icon-button")
+			const dialogWindow = target.closest('[role="dialog"]')
+
+			if (button && dialogWindow) {
+				const targetRect = button.getBoundingClientRect()
+				const dialogRect = dialogWindow.getBoundingClientRect()
+
+				const shiftDistance = 45
+				// When calculating the left distance, it is being considered against the actual left side of screen
+				const hoverWindowLeft = targetRect.left + shiftDistance
+				//This top however is considering the dialog rect as it's start, then we need to do the calculation
+				const hoverWindowTop = targetRect.top - dialogRect.top - shiftDistance
+				this.hoverInfo = textMessage
+				this.hoverPosition = {
+					left: hoverWindowLeft,
+					top: hoverWindowTop,
+				}
+
+				this.shouldDisplayHover = !this.shouldDisplayHover
+			}
+		}
 	}
 
 	private renderFolderMapping(data: ImapImportData) {
