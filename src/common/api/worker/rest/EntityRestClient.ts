@@ -43,6 +43,7 @@ import { SymmetricEncryptionScheme } from "../../../../crypto/encryption/symmetr
 import { generateKdfNonce, KdfNonce, validateKdfNonceLength } from "../../../../crypto/encryption/symmetric/SymmetricCipherUtils"
 import { createInstanceKdfNonce, createTypeInfo } from "../../../../typerefs/entities/sys/TypeRefs"
 import { SubKeyInfo } from "../../../../crypto/encryption/symmetric/encryption/SubKeyProvider"
+import { PreconditionFailedError } from "@tutao/rest-client/error"
 
 assertWorkerOrNode()
 
@@ -670,6 +671,7 @@ export class EntityRestClient implements EntityRestInterface {
 				const typeId = instance._type.typeId.toString()
 				const typeInfo = createTypeInfo({ application, typeId })
 				await this._crypto.postUpdateKdfNonceService(createInstanceKdfNonce({ kdfNonce, instanceId, instanceList, typeInfo }))
+				// TODO use returned KDF nonce
 			} else {
 				kdfNonce = validateKdfNonceLength(instance._kdfNonce)
 			}
