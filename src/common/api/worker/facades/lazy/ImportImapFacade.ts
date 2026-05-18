@@ -126,7 +126,7 @@ export class ImportImapFacade {
 		imapMailboxesToTutaFolders?: Map<string, Id>,
 	): Promise<tutanotaTypeRefs.ImportImapFolderSyncState | undefined> {
 		if (imapMailbox.name) {
-			const mailGroupId = importImapAccountSyncState._ownerGroup!
+			const mailGroupId = assertNotNull(importImapAccountSyncState._ownerGroup)
 			// if a root folder is not set on importImapAccountSyncState, we try to match the folder to a Tutanota folder, if that fails, we create a new folder
 			let mailFolderId: IdTuple
 			if (importImapAccountSyncState.rootImportMailFolder == null && imapMailboxesToTutaFolders && imapMailboxesToTutaFolders.has(imapMailbox.path)) {

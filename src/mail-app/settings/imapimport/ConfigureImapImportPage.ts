@@ -283,8 +283,8 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 		const obj = this
 		return m(
 			"",
-			imapMailboxToTutaFolderRows.map((mailboxToRow) => {
-				return m(".flex.gap-8.items-center.mt-8", [
+			imapMailboxToTutaFolderRows.map((mailboxToRow) =>
+				m(".flex.gap-8.items-center.mt-8", [
 					m(TextField, {
 						class: "",
 						value: mailboxToRow.imapMailbox.name ?? "",
@@ -319,14 +319,22 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 					m(IconButton, {
 						icon: Icons.Plus,
 						title: "selectMultiple_action",
-						click: () => {
+						click: async () => {
 							if (this.controller) {
-								showEditFolderDialog(assertNotNull(this.controller.selectedMailBoxDetail))
+								await showEditFolderDialog(assertNotNull(this.controller.selectedMailBoxDetail), null, null, mailboxToRow.imapMailbox.name)
+									.then(() => (obj.folderSystem = assertNotNull(this.controller).getFolderSystemForSelectedMailbox()))
+									.then(() => {
+										const newlyAddedFolder = obj.folderSystem.getFolderByName(assertNotNull(mailboxToRow.imapMailbox.name))
+										if (newlyAddedFolder) {
+											this.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, getElementId(newlyAddedFolder))
+										}
+									})
+									.then(() => m.redraw())
 							}
 						},
 					}),
-				])
-			}),
+				]),
+			),
 		)
 	}
 

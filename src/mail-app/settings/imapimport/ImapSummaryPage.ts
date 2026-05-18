@@ -173,9 +173,17 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 					m(IconButton, {
 						icon: Icons.Plus,
 						title: "selectMultiple_action",
-						click: () => {
+						click: async () => {
 							if (this.controller) {
-								showEditFolderDialog(assertNotNull(this.controller.selectedMailBoxDetail))
+								await showEditFolderDialog(assertNotNull(this.controller.selectedMailBoxDetail), null, null, mailboxToRow.imapMailbox.name)
+									.then(() => (data.folderSystem = assertNotNull(this.controller).getFolderSystemForSelectedMailbox()))
+									.then(() => {
+										const newlyAddedFolder = data.folderSystem.getFolderByName(assertNotNull(mailboxToRow.imapMailbox.name))
+										if (newlyAddedFolder) {
+											data.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, getElementId(newlyAddedFolder))
+										}
+									})
+									.then(() => m.redraw())
 							}
 						},
 					}),
@@ -440,6 +448,6 @@ async function initializeAndContinueImapImport(
 		"startingImapImport_msg",
 		imapImportController
 			.initializeImport(initializeImportParams)
-			.then(async (activeImport) => await imapImportController.continueImport(activeImport.remoteStateId!)),
+			.then(async (activeImport) => await imapImportController.continueImport(assertNotNull(activeImport.remoteStateId))),
 	)
 }

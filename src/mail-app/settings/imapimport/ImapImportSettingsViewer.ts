@@ -110,7 +110,7 @@ class ImapImportSettingsViewer implements UpdatableSettingsViewer {
 
 	private renderSyncProgress(imapImportController: ImapImportController) {
 		return Array.from(imapImportController.getActiveImports().entries()).map(([accountSyncStateIdString, activeImport]) => {
-			const accountSyncStateId = activeImport.remoteStateId!
+			const accountSyncStateId = assertNotNull(activeImport.remoteStateId)
 			if (!imapImportController.shouldRenderCancelButton(accountSyncStateId)) {
 				return null
 			}

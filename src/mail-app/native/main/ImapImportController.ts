@@ -41,7 +41,7 @@ export class ImapImportController {
 
 	async initializeImport(initializeImportParams: InitializeImapImportParams) {
 		const { result } = await this.imapImporter.initializeImport(initializeImportParams)
-		const remoteId = result.remoteStateId!
+		const remoteId = assertNotNull(result.remoteStateId)
 
 		const newImport: ActiveImport = {
 			mailGroupId: initializeImportParams.mailGroupId,
@@ -77,12 +77,12 @@ export class ImapImportController {
 
 	async pauseImport(accountSyncStateId: IdTuple) {
 		if (this.activeImports.has(this.getMapKey(accountSyncStateId))) {
-			const activeImport = this.activeImports.get(this.getMapKey(accountSyncStateId))!
+			const activeImport = assertNotNull(this.activeImports.get(this.getMapKey(accountSyncStateId)))
 			activeImport.imapImportState = await this.imapImporter.pauseImport(accountSyncStateId)
 			return activeImport
 		} else {
 			await this.initImapAccountSyncStates()
-			return this.activeImports.get(this.getMapKey(accountSyncStateId))!
+			return assertNotNull(this.activeImports.get(this.getMapKey(accountSyncStateId)))
 		}
 	}
 
@@ -123,7 +123,7 @@ export class ImapImportController {
 	async loadImapImportState(accountSyncStateId: IdTuple) {
 		const imapImportState = await this.imapImporter.loadImapImportState(accountSyncStateId)
 		if (this.activeImports.has(this.getMapKey(accountSyncStateId))) {
-			const activeImport = this.activeImports.get(this.getMapKey(accountSyncStateId))!
+			const activeImport = assertNotNull(this.activeImports.get(this.getMapKey(accountSyncStateId)))
 			activeImport.imapImportState = imapImportState
 		}
 		return imapImportState
@@ -201,7 +201,8 @@ export class ImapImportController {
 	}
 
 	getFolderSystemForSelectedMailbox() {
-		return assertNotNull(this.mailModel.getFolderSystemByGroupId(this.selectedMailBoxDetail!.mailbox._ownerGroup!))
+		const selectedMailBoxDetail = assertNotNull(this.selectedMailBoxDetail)
+		return assertNotNull(this.mailModel.getFolderSystemByGroupId(assertNotNull(selectedMailBoxDetail.mailbox._ownerGroup)))
 	}
 
 	async constructImapMailboxesToTutaFoldersMap(imapMailboxes: ReadonlyArray<ImapMailbox>): Promise<Map<string, Id>> {
@@ -242,7 +243,7 @@ export class ImapImportController {
 						remoteStateId: imapAccountSyncState._id,
 						imapImportState: new ImapImportState(ImportState.RUNNING),
 						remoteMailAddress: imapAccountSyncState.imapAccount.userName,
-						mailGroupId: mailbox._ownerGroup!,
+						mailGroupId: assertNotNull(mailbox._ownerGroup),
 						syncProgress: await this.estimateFolderSyncProgressForAccountSyncState(imapAccountSyncState._id),
 					})
 					imapImportStates.set(this.getMapKey(imapAccountSyncState._id), new ImapImportState(ImportState.RUNNING))

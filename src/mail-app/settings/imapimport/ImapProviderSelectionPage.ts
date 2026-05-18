@@ -24,16 +24,11 @@ const initialTitleSectionParams = {
 
 export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 	private dom: HTMLElement | null = null
-	private controller: ImapImportController | null = null
 	private selectedProvider: ImapProvider = ImapProvider.Other
 	private titleSectionParams = initialTitleSectionParams
 
 	oncreate(vnode: VnodeDOM<WizardPageAttrs<ImapImportData>>) {
 		this.dom = vnode.dom as HTMLElement
-	}
-
-	async oninit() {
-		this.controller = await mailLocator.imapImportController()
 	}
 
 	view(vnode: Vnode<WizardPageAttrs<ImapImportData>>): Children {

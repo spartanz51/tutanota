@@ -149,9 +149,10 @@ export class ImapSyncSession implements SyncSessionEventListener {
 			const listTreeResponse = await imapClient.listTree()
 			await imapClient.logout()
 
-			const fetchedRootMailboxes = listTreeResponse.folders!.map((listTreeResponse) => {
-				return ImapMailbox.fromImapFlowListTreeResponse(listTreeResponse, null)
-			})
+			const fetchedRootMailboxes =
+				listTreeResponse.folders?.map((listTreeResponse) => {
+					return ImapMailbox.fromImapFlowListTreeResponse(listTreeResponse, null)
+				}) ?? []
 			return await this.getSyncSessionMailboxes(knownMailboxes, fetchedRootMailboxes)
 		} catch (error) {
 			console.log("we are getting errors still, ", error)
@@ -185,9 +186,11 @@ export class ImapSyncSession implements SyncSessionEventListener {
 		const listTreeResponse = await imapClient.listTree()
 		await imapClient.logout()
 
-		return listTreeResponse.folders!.map((listTreeResponse) => {
-			return ImapMailbox.fromImapFlowListTreeResponse(listTreeResponse, null)
-		})
+		return (
+			listTreeResponse.folders?.map((listTreeResponse) => {
+				return ImapMailbox.fromImapFlowListTreeResponse(listTreeResponse, null)
+			}) ?? []
+		)
 	}
 
 	private async getSyncSessionMailboxes(knownMailboxes: ImapSyncSessionMailbox[], fetchedRootMailboxes: ImapMailbox[]): Promise<ImapSyncSessionMailbox[]> {

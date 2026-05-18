@@ -106,19 +106,19 @@ export class ImapImporter implements ImapImportFacade {
 	 * Attempts to continue an import from existing state, may return errors in case of failure.
 	 */
 	async continueImport(imapAccountSyncStateId: IdTuple): Promise<ImportResult> {
-		const session = this.getSessionOrThrow(imapAccountSyncStateId)
+		const session = assertNotNull(this.getSessionOrNull(imapAccountSyncStateId))
 		if (session.imapImportState.state === ImportState.RUNNING) {
-			return { result: { state: session.imapImportState, remoteStateId: session.importImapAccountSyncState!._id } }
+			return { result: { state: session.imapImportState, remoteStateId: session.importImapAccountSyncState._id } }
 		}
 
 		if (session.imapImportState.state === ImportState.POSTPONED && session.imapImportState.postponedUntil.getTime() > Date.now()) {
 			session.imapImportState.state = ImportState.POSTPONED
-			return { result: { state: session.imapImportState, remoteStateId: session.importImapAccountSyncState!._id } }
+			return { result: { state: session.imapImportState, remoteStateId: session.importImapAccountSyncState._id } }
 		}
 
 		session.importImapAccountSyncState = await this.loadImportImapAccountSyncStateById(imapAccountSyncStateId)
 
-		const postponedUntil = session.importImapAccountSyncState?.postponedUntil
+		const postponedUntil = session.importImapAccountSyncState.postponedUntil
 		if (postponedUntil) {
 			session.imapImportState.postponedUntil = new Date(Number.parseInt(postponedUntil))
 		}
@@ -142,31 +142,30 @@ export class ImapImporter implements ImapImportFacade {
 			return Promise.resolve({ error: startImportResult, result: { state: session.imapImportState } })
 		} else {
 			session.imapImportState = new ImapImportState(ImportState.RUNNING)
-			return Promise.resolve({ result: { state: session.imapImportState, remoteStateId: session.importImapAccountSyncState!._id } })
+			return Promise.resolve({ result: { state: session.imapImportState, remoteStateId: session.importImapAccountSyncState._id } })
 		}
 	}
 
 	async pauseImport(accountSyncStateId: IdTuple): Promise<ImapImportState> {
-		const session = this.getSessionOrThrow(accountSyncStateId)
-		if (session.importImapAccountSyncState !== null) {
+		const session = this.getSessionOrNull(accountSyncStateId)
+		if (session !== null) {
 			await this.imapImportSystemFacade.stopImport(session.importImapAccountSyncState._id)
 			await this.importImapFacade.pauseImapImport(session.importImapAccountSyncState._id)
 			session.imapImportState = new ImapImportState(ImportState.PAUSED)
 		}
-		return Promise.resolve(session.imapImportState)
+		return Promise.resolve(new ImapImportState(ImportState.PAUSED))
 	}
 
 	async postponeImport(accountSyncStateId: IdTuple, postponedUntil: Date): Promise<ImapImportState> {
-		const session = this.getSessionOrThrow(accountSyncStateId)
-		if (session.importImapAccountSyncState != null) {
+		const session = this.getSessionOrNull(accountSyncStateId)
+		if (session !== null) {
 			await this.imapImportSystemFacade.stopImport(session.importImapAccountSyncState._id)
 			await this.importImapFacade.postponeImapImport(postponedUntil, session.importImapAccountSyncState?._id)
 			session.imapImportState = new ImapImportState(ImportState.POSTPONED, postponedUntil)
+			return session.imapImportState
 		} else {
-			session.imapImportState = new ImapImportState(ImportState.NOT_INITIALIZED)
+			return new ImapImportState(ImportState.NOT_INITIALIZED)
 		}
-
-		return session.imapImportState
 	}
 
 	async deleteImport(importImapAccountSyncStateId: IdTuple): Promise<boolean> {
@@ -189,8 +188,8 @@ export class ImapImporter implements ImapImportFacade {
 	}
 
 	loadImapImportState(accountSyncStateId: IdTuple): Promise<ImapImportState> {
-		const session = this.getSessionOrThrow(accountSyncStateId)
-		return Promise.resolve(session.imapImportState)
+		const session = this.getSessionOrNull(accountSyncStateId)
+		return Promise.resolve(session?.imapImportState ?? new ImapImportState(ImportState.NOT_INITIALIZED))
 	}
 
 	async loadAllImportImapFolderSyncStates(importImapFolderSyncStateListId: Id): Promise<tutanotaTypeRefs.ImportImapFolderSyncState[]> {
@@ -207,7 +206,7 @@ export class ImapImporter implements ImapImportFacade {
 			for (const importedImapMail of importedImapMails) {
 				const imapUid = parseInt(importedImapMail.imapUid)
 				const importedImapMailId = new ImapMailId(imapUid)
-				if (importedImapMail.imapModSeq != null) {
+				if (importedImapMail.imapModSeq !== null) {
 					importedImapMailId.modSeq = BigInt(importedImapMail.imapModSeq)
 				}
 				importedImapMailId.messageId = importedImapMail.messageId
@@ -281,7 +280,7 @@ export class ImapImporter implements ImapImportFacade {
 	}
 
 	async onMailbox(accountSyncStateId: IdTuple, imapMailbox: ImapMailbox, eventType: AdSyncEventType): Promise<void> {
-		const session = this.getSessionOrThrow(accountSyncStateId)
+		const session = assertNotNull(this.getSessionOrNull(accountSyncStateId))
 
 		switch (eventType) {
 			case AdSyncEventType.CREATE: {
@@ -318,7 +317,7 @@ export class ImapImporter implements ImapImportFacade {
 	}
 
 	async onMailboxStatus(accountSyncStateId: IdTuple, imapMailboxStatus: ImapMailboxStatus): Promise<void> {
-		const session = this.getSessionOrThrow(accountSyncStateId)
+		const session = assertNotNull(this.getSessionOrNull(accountSyncStateId))
 		if (session.importImapFolderSyncStates === undefined) {
 			throw new ProgrammingError("onMailboxStatus event received but importImapFolderSyncStates not initialized!")
 		}
@@ -335,7 +334,7 @@ export class ImapImporter implements ImapImportFacade {
 	}
 
 	async onMultipleMails(accountSyncStateId: IdTuple, imapMails: ImapMail[], eventType: AdSyncEventType) {
-		const session = this.getSessionOrThrow(accountSyncStateId)
+		const session = assertNotNull(this.getSessionOrNull(accountSyncStateId))
 		if (isEmpty(imapMails)) {
 			return Promise.resolve()
 		}
@@ -356,7 +355,7 @@ export class ImapImporter implements ImapImportFacade {
 		}
 		switch (eventType) {
 			case AdSyncEventType.CREATE: {
-				this.importMailFacade.importMails(importMailParamsList, folderSyncState?._ownerGroup!).catch((error: Error) => {
+				this.importMailFacade.importMails(importMailParamsList, assertNotNull(folderSyncState?._ownerGroup)).catch((error: Error) => {
 					if (error instanceof SuspensionError) {
 						this.postponeImport(
 							accountSyncStateId,
@@ -386,7 +385,7 @@ export class ImapImporter implements ImapImportFacade {
 	}
 
 	async onFinish(accountSyncStateId: IdTuple, downloadedQuota: number): Promise<void> {
-		const session = this.getSessionOrThrow(accountSyncStateId)
+		const session = assertNotNull(this.getSessionOrNull(accountSyncStateId))
 		session.imapImportState = new ImapImportState(ImportState.FINISHED)
 		if (session.importImapAccountSyncState) {
 			await this.importImapFacade.setAllImportImapFolderSyncStatesToFinished(accountSyncStateId)
@@ -395,8 +394,10 @@ export class ImapImporter implements ImapImportFacade {
 	}
 
 	onError(accountSyncStateId: IdTuple, imapError: ImapError): Promise<void> {
-		const session = this.getSessionOrThrow(accountSyncStateId)
-		session.imapImportState = new ImapImportState(ImportState.NOT_INITIALIZED)
+		const session = this.getSessionOrNull(accountSyncStateId)
+		if (session) {
+			session.imapImportState = new ImapImportState(ImportState.NOT_INITIALIZED)
+		}
 		console.error("IMAP error:", accountSyncStateId, imapError)
 		return Promise.resolve()
 	}
@@ -405,11 +406,8 @@ export class ImapImporter implements ImapImportFacade {
 		return id.join("/")
 	}
 
-	private getSessionOrThrow(accountSyncId: IdTuple): ImapImportSession {
+	private getSessionOrNull(accountSyncId: IdTuple): ImapImportSession | null {
 		const session = this.sessions.get(this.getSessionsMapKey(accountSyncId))
-		if (!session) {
-			throw new ProgrammingError(`No active session found for sync ID: ${this.getSessionsMapKey(accountSyncId)}`)
-		}
-		return session
+		return session ?? null
 	}
 }

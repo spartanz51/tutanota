@@ -32,7 +32,6 @@ export class EnterImapCredentialsPage implements WizardPageN<ImapImportData> {
 	}
 
 	view(vnode: Vnode<WizardPageAttrs<ImapImportData>>): Children {
-		console.log("will render with params", this.titleSectionParams)
 		return m(".mt-24", [
 			m(TitleSection, {
 				...this.titleSectionParams,

@@ -9,6 +9,7 @@ import {
 	TimeStamp,
 } from "./utils/AdSyncUtils.js"
 import { ImapMailboxSpecialUse } from "../../../api/common/utils/imapImportUtils/ImapMailbox.js"
+import { assertNotNull } from "@tutao/utils"
 
 export enum SyncSessionMailboxImportance {
 	NO_SYNC = 0,
@@ -80,7 +81,9 @@ export class ImapSyncSessionMailbox {
 		const averageExists = this.averageThroughputInTimeIntervalHistory.has(key)
 		return (
 			this.importance *
-			(averageExists ? this.averageThroughputInTimeIntervalHistory.get(key)! : this.getAverageThroughputInTimeInterval(fromTimeStamp, toTimeStamp))
+			(averageExists
+				? assertNotNull(this.averageThroughputInTimeIntervalHistory.get(key))
+				: this.getAverageThroughputInTimeInterval(fromTimeStamp, toTimeStamp))
 		)
 	}
 

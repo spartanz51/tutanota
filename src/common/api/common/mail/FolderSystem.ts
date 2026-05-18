@@ -45,6 +45,11 @@ export class FolderSystem {
 		return subtree?.folder ?? null
 	}
 
+	getFolderByName(name: string): tutanotaTypeRefs.MailSet | null {
+		const subtree = this.getFolderByNameInSubtrees(this.systemSubtrees, name) ?? this.getFolderByNameInSubtrees(this.customSubtrees, name)
+		return subtree?.folder ?? null
+	}
+
 	getFolderByMail(mail: tutanotaTypeRefs.Mail): tutanotaTypeRefs.MailSet | null {
 		const sets = mail.sets
 		for (const setId of sets) {
@@ -118,6 +123,10 @@ export class FolderSystem {
 
 	private getFolderByIdInSubtrees(systems: ReadonlyArray<FolderSubtree>, folderId: Id): FolderSubtree | null {
 		return this.getFolderBy(systems, (system) => isSameId(getElementId(system.folder), folderId))
+	}
+
+	private getFolderByNameInSubtrees(systems: ReadonlyArray<FolderSubtree>, name: string): FolderSubtree | null {
+		return this.getFolderBy(systems, (system) => system.folder.name.toLowerCase() === name.toLowerCase())
 	}
 
 	private getFolderBy(systems: ReadonlyArray<FolderSubtree>, predicate: (subtree: FolderSubtree) => boolean): FolderSubtree | null {

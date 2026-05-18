@@ -21,11 +21,16 @@ type MailSet = tutanotaTypeRefs.MailSet
  * Dialog for Edit and Add folder are the same.
  * @param editedFolder if this is null, a folder is being added, otherwise a folder is being edited
  */
-export async function showEditFolderDialog(mailBoxDetail: MailboxDetail, editedFolder: MailSet | null = null, parentFolder: MailSet | null = null) {
+export async function showEditFolderDialog(
+	mailBoxDetail: MailboxDetail,
+	editedFolder: MailSet | null = null,
+	parentFolder: MailSet | null = null,
+	prefilledFolderName: string | null = null,
+) {
 	const noParentFolderOption = lang.get("comboBoxSelectionNone_msg")
 	const mailGroupId = mailBoxDetail.mailGroup._id
 	const folders = await mailLocator.mailModel.getMailboxFoldersForId(mailBoxDetail.mailbox.mailSets._id)
-	let folderNameValue = editedFolder?.name ?? ""
+	let folderNameValue = editedFolder?.name ?? prefilledFolderName ?? ""
 	let targetFolders: SelectorItemList<MailSet | null> = folders
 		.getIndentedList(editedFolder)
 		// filter: SPAM and TRASH and descendants are only shown if editing (mailSets can only be moved there, not created there)

@@ -9,7 +9,7 @@ import { AdSyncConfig } from "./ImapAdSync.js"
 import { AdSyncProcessesOptimizerEventListener } from "./optimizer/processesoptimizer/AdSyncProcessesOptimizer.js"
 import { DifferentialUidLoader, UID_FETCH_REQUEST_WAIT_TIME, UidFetchRequestType } from "./DifferentialUidLoader.js"
 import { setTimeout } from "node:timers/promises"
-import { isEmpty, isNotEmpty, splitInChunks } from "@tutao/utils"
+import { assertNotNull, isEmpty, isNotEmpty, splitInChunks } from "@tutao/utils"
 import { ImportImapFolderSyncStatus, MAX_NBR_OF_MAILS_SYNC_OPERATION } from "@tutao/app-env"
 import { imapMailFromImapFlowFetchMessageObject } from "./imapmail/ImapImportUtils"
 import { ImapFlow } from "./imapflow-custom.js"
@@ -308,7 +308,7 @@ export class ImapSyncSessionProcess {
 	// emit DELETE events when IMAP QRESYNC is enabled and supported
 	private setupImapFlowExpungeHandler(imapClient: ImapFlow, openedImapMailbox: ImapMailbox, adSyncEventListener: AdSyncEventListener) {
 		imapClient.on("expunge", (deletedMail) => {
-			this.emitImapMailDeleteEvent(deletedMail.uid!, openedImapMailbox, adSyncEventListener)
+			this.emitImapMailDeleteEvent(assertNotNull(deletedMail.uid), openedImapMailbox, adSyncEventListener)
 		})
 	}
 
