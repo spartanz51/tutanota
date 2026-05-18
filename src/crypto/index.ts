@@ -79,7 +79,7 @@ export {
 	ARGON2ID_MEMORY_IN_KiB,
 	ARGON2ID_PARALLELISM,
 } from "./hashes/Argon2id/Argon2id.js"
-export { KeyLength, type EntropySource, type HkdfKeyDerivationDomains, UNIT_SEPARATOR_CHAR, DomainSeparator } from "./misc/Constants.js"
+export { KeyLength, type EntropySource, type HkdfKeyDerivationDomains, UNIT_SEPARATOR_CHAR, type DomainSeparator } from "./misc/Constants.js"
 export {
 	type AbstractEncryptedKeyPair,
 	type EncryptedKeyPairs,
@@ -158,8 +158,8 @@ export {
 	INITIALIZATION_VECTOR_LENGTH_BYTES,
 	FIXED_INITIALIZATION_VECTOR,
 	generateInitializationVector,
-	InitializationVector,
-	KdfNonce,
+	type InitializationVector,
+	type KdfNonce,
 } from "./encryption/symmetric/SymmetricCipherUtils.js"
 export { AesKeyLength, getAndVerifyAesKeyLength, getKeyLengthInBytes } from "./encryption/symmetric/AesKeyLength.js"
 export { blake3Hash, blake3Mac, blake3MacVerify, blake3Kdf } from "./hashes/Blake3.js"
@@ -168,25 +168,25 @@ export * as cryptoUtils from "./CryptoUtils.js"
 export * from "./CryptoWrapper.js"
 export {
 	SymmetricKeyDeriver,
-	SymmetricSubKeys,
-	AeadSubKeys,
-	AesSubKeys,
-	AesCbcThenHmacSubKeys,
-	UnusedReservedUnauthenticatedSubKeys,
+	type SymmetricSubKeys,
+	type AeadSubKeys,
+	type AesSubKeys,
+	type AesCbcThenHmacSubKeys,
+	type UnusedReservedUnauthenticatedSubKeys,
 } from "./encryption/symmetric/SymmetricKeyDeriver.js"
 export {
 	SymmetricCipherVersion,
-	SymmetricAesCipherVersion,
-	SymmetricAeadCipherVersion,
+	type SymmetricAesCipherVersion,
+	type SymmetricAeadCipherVersion,
 	getSymmetricCipherVersion,
-	SymmetricCipherVersionAeadWithGroupKey,
-	SymmetricCipherVersionAeadWithSessionKey,
-	SymmetricAeadCipherVersionMaybeWithGroupKeyVersion,
+	type SymmetricCipherVersionAeadWithGroupKey,
+	type SymmetricCipherVersionAeadWithSessionKey,
+	type SymmetricAeadCipherVersionMaybeWithGroupKeyVersion,
 } from "./encryption/symmetric/SymmetricCipherVersion.js"
 export { SymmetricCipherFacade, SYMMETRIC_CIPHER_FACADE } from "./encryption/symmetric/SymmetricCipherFacade.js"
 export { AesCbcFacade } from "./encryption/symmetric/AesCbcFacade.js"
 export { InstanceDecryptor } from "./encryption/symmetric/decryption/InstanceDecryptor"
 export { MissingSessionKey } from "./encryption/symmetric/decryption/InstanceDecryptor"
-export { ValueDecryptor } from "./encryption/symmetric/decryption/ValueDecryptor"
+export { type ValueDecryptor } from "./encryption/symmetric/decryption/ValueDecryptor"
 export { AEAD_ATTRIBUTE_ON_UNAUTHENTICATED_INSTANCE_SESSION_KEY_DOMAIN } from "./encryption/symmetric/decryption/InstanceDecryptor"
 export { AEAD_ATTRIBUTE_ON_UNAUTHENTICATED_INSTANCE_GROUP_KEY_DOMAIN } from "./encryption/symmetric/decryption/InstanceDecryptor"

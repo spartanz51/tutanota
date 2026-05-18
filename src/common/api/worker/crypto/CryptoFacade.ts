@@ -917,7 +917,7 @@ export class CryptoFacade {
 
 	async postUpdateKdfNonceService(instanceKdfNonce: sysTypeRefs.InstanceKdfNonce) {
 		const input = sysTypeRefs.createUpdateKdfNoncePostIn({ instanceKdfNonce: instanceKdfNonce })
-		await this.serviceExecutor.post(sysServices.UpdateKdfNonceService, input)
+		return await this.serviceExecutor.post(sysServices.UpdateKdfNonceService, input)
 	}
 
 	async getCurrentSymGroupKey(groupId: Id): Promise<VersionedKey> {

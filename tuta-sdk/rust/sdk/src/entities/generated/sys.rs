@@ -6475,3 +6475,22 @@ impl Entity for UpdateKdfNoncePostIn {
 		}
 	}
 }
+
+#[derive(uniffi::Record, Clone, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "testing"), derive(PartialEq, Debug))]
+pub struct UpdateKdfNoncePostOut {
+	#[serde(rename = "2750")]
+	pub _format: i64,
+	#[serde(rename = "2751")]
+	#[serde(with = "serde_bytes")]
+	pub kdfNonce: Vec<u8>,
+}
+
+impl Entity for UpdateKdfNoncePostOut {
+	fn type_ref() -> TypeRef {
+		TypeRef {
+			app: AppName::Sys,
+			type_id: TypeId::from(2749),
+		}
+	}
+}

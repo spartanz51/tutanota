@@ -435,7 +435,7 @@ export const UpdateKdfNonceService = Object.freeze({
 	app: "sys",
 	name: "UpdateKdfNonceService",
 	get: null,
-	post: { data: sysTypeRefs.UpdateKdfNoncePostInTypeRef, return: null },
+	post: { data: sysTypeRefs.UpdateKdfNoncePostInTypeRef, return: sysTypeRefs.UpdateKdfNoncePostOutTypeRef },
 	put: null,
 	delete: null,
 } as const)

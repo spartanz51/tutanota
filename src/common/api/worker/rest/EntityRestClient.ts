@@ -632,13 +632,13 @@ export class EntityRestClient implements EntityRestInterface {
 			} else {
 				groupKey = await this._crypto.getCurrentSymGroupKey(instance._ownerGroup ?? "0")
 			}
-			let kdfNonce: KdfNonce
-			if (instance._kdfNonce == null) {
-				kdfNonce = generateKdfNonce()
-				instance._kdfNonce = kdfNonce
-			} else {
-				kdfNonce = validateKdfNonceLength(instance._kdfNonce)
+			if (instance._kdfNonce != null) {
+				// why do you have a KDF nonce at this point? is the instance a deep copy?
+				console.log(`overwriting KDF nonce previously found on instance of type ${instance._type} with ID ${instance._id}`)
 			}
+
+			const kdfNonce: KdfNonce = generateKdfNonce()
+			instance._kdfNonce = kdfNonce
 			return { cipherVersion: SymmetricCipherVersion.AeadWithGroupKey, groupKey, kdfNonce }
 		}
 	}
@@ -657,8 +657,6 @@ export class EntityRestClient implements EntityRestInterface {
 			}
 			let kdfNonce: KdfNonce
 			if (instance._kdfNonce == null) {
-				kdfNonce = generateKdfNonce()
-				instance._kdfNonce = kdfNonce
 				let instanceList: Nullable<Id> = null
 				let instanceId: Id
 				if (instance._id instanceof Array) {
@@ -670,8 +668,11 @@ export class EntityRestClient implements EntityRestInterface {
 				const application = instance._type.app
 				const typeId = instance._type.typeId.toString()
 				const typeInfo = createTypeInfo({ application, typeId })
-				await this._crypto.postUpdateKdfNonceService(createInstanceKdfNonce({ kdfNonce, instanceId, instanceList, typeInfo }))
-				// TODO use returned KDF nonce
+				const out = await this._crypto.postUpdateKdfNonceService(
+					createInstanceKdfNonce({ kdfNonce: generateKdfNonce(), instanceId, instanceList, typeInfo }),
+				)
+				kdfNonce = validateKdfNonceLength(out.kdfNonce)
+				instance._kdfNonce = kdfNonce
 			} else {
 				kdfNonce = validateKdfNonceLength(instance._kdfNonce)
 			}

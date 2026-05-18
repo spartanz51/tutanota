@@ -1,4 +1,4 @@
-import o, { assertThrows } from "@tutao/otest"
+import o, { assertThrows, spy } from "@tutao/otest"
 import { HttpMethod, MediaType, RestClient, restError } from "@tutao/rest-client"
 import { SetupMultipleError } from "../../../../../src/common/api/common/error/SetupMultipleError.js"
 import {
@@ -17,9 +17,10 @@ import {
 import { doBlobRequestWithRetry, EntityRestClient, tryServers, typeModelToRestPath } from "../../../../../src/common/api/worker/rest/EntityRestClient.js"
 import { CryptoFacade } from "../../../../../src/common/api/worker/crypto/CryptoFacade.js"
 import { func, instance, matchers, object, verify, when } from "testdouble"
-import { AuthDataProvider, UserFacade } from "../../../../../src/common/api/worker/facades/UserFacade.js"
+import { UserFacade } from "../../../../../src/common/api/worker/facades/UserFacade.js"
 import { LoginIncompleteError } from "../../../../../src/common/api/common/error/LoginIncompleteError.js"
 import {
+	arrayEquals,
 	assertNotNull,
 	Base64,
 	base64ToUint8Array,
@@ -37,7 +38,7 @@ import { ProgrammingError } from "@tutao/app-env"
 import { BlobAccessTokenFacade } from "../../../../../src/common/api/worker/facades/BlobAccessTokenFacade.js"
 import { clientInitializedTypeModelResolver, createTestEntity, instancePipelineFromTypeModelResolver, removeOriginals } from "../../../TestUtils.js"
 import { InstancePipeline } from "@tutao/instance-pipeline"
-import { aes256RandomKey, AesKey, CryptoWrapper, decryptKey, VersionedKey } from "@tutao/crypto"
+import { aes256RandomKey, AesKey, CryptoWrapper, decryptKey, SymmetricCipherVersion, VersionedKey } from "@tutao/crypto"
 import { EntityClient } from "../../../../../src/common/api/common/EntityClient"
 import { ServiceExecutor } from "../../../../../src/common/api/worker/rest/ServiceExecutor"
 import { DefaultEntityRestCache } from "../../../../../src/common/api/worker/rest/DefaultEntityRestCache"
@@ -47,6 +48,8 @@ import { PublicEncryptionKeyProvider } from "../../../../../src/common/api/worke
 import { KeyRotationFacade } from "../../../../../src/common/api/worker/facades/KeyRotationFacade"
 import { InstanceSessionKeysCache } from "../../../../../src/common/api/worker/facades/InstanceSessionKeysCache"
 import { SymmetricEncryptionScheme } from "@tutao/crypto/symmetric-cipher-facade"
+import { SubKeyInfo } from "../../../../../src/crypto/encryption/symmetric/encryption/SubKeyProvider"
+import { generateKdfNonce } from "@tutao/crypto/symmetric-cipher-utils"
 
 const { anything, argThat, captor } = matchers
 
@@ -95,6 +98,7 @@ o.spec("EntityRestClient", function () {
 	let currentDebuggingStatus
 	let typeModelResolver: TypeModelResolver
 	let cryptoWrapper: CryptoWrapper
+	let authDataProvider: any
 
 	async function typeRefToRestPath(typeRef: TypeRef<unknown>): Promise<string> {
 		return typeModelToRestPath(await typeModelResolver.resolveClientTypeReference(typeRef))
@@ -138,7 +142,8 @@ o.spec("EntityRestClient", function () {
 			return sk
 		}
 
-		const authDataProvider: AuthDataProvider = {
+		authDataProvider = {
+			encryptionScheme: SymmetricEncryptionScheme.AesCbc,
 			createAuthHeaders(): Dict {
 				return authHeader
 			},
@@ -146,7 +151,7 @@ o.spec("EntityRestClient", function () {
 				return fullyLoggedIn
 			},
 			getDefaultSymmetricEncryptionScheme(): SymmetricEncryptionScheme {
-				return SymmetricEncryptionScheme.AesCbc
+				return this.encryptionScheme
 			},
 		}
 
@@ -841,6 +846,87 @@ o.spec("EntityRestClient", function () {
 			const result = await entityRestClient.setup("listId", newCalendar, undefined, { ownerKey: ownerGroupKey })
 
 			o(result).equals(resultId)
+		})
+
+		o("Setup generates a random KDF nonce if encrypting with AeadWithGroupKey", async function () {
+			authDataProvider.encryptionScheme = SymmetricEncryptionScheme.Aead
+			const ownerGroupKey: VersionedKey = { object: aes256RandomKey(), version: 0 }
+			const newCalendar = createTestEntity(tutanotaTypeRefs.CalendarEventTypeRef, {
+				_id: ["listId", "element"],
+				_permissions: "permissions",
+				_ownerGroup: ownerGroupId,
+			})
+			const resultId = "resultId"
+
+			const persistentPostReturn = createTestEntity(baseTypeRefs.PersistenceResourcePostReturnTypeRef, {
+				generatedId: resultId,
+				permissionListId: "permissionListId",
+			})
+
+			const untypedPersistentPostReturn = await instancePipeline.mapAndEncrypt(
+				baseTypeRefs.PersistenceResourcePostReturnTypeRef,
+				persistentPostReturn,
+				null,
+			)
+			when(restClient.request(`/rest/tutanota/calendarevent/listId`, HttpMethod.POST, matchers.anything()), { times: 1 }).thenResolve(
+				JSON.stringify(untypedPersistentPostReturn),
+			)
+
+			instancePipeline.mapAndEncrypt = spy(instancePipeline.mapAndEncrypt)
+
+			o.check(newCalendar._kdfNonce).equals(null)
+			await entityRestClient.setup("listId", newCalendar, undefined, { ownerKey: ownerGroupKey })
+			o.check(newCalendar._kdfNonce).notEquals(null)
+
+			o.check(instancePipeline.mapAndEncrypt.invocations.length).equals(1)
+			const invocation = instancePipeline.mapAndEncrypt.invocations[0]
+			const subKeyInfo: SubKeyInfo = invocation[2]
+			if (subKeyInfo == null || subKeyInfo.cipherVersion !== SymmetricCipherVersion.AeadWithGroupKey) {
+				throw new Error()
+			}
+			o.check(arrayEquals(subKeyInfo.kdfNonce!, newCalendar._kdfNonce!)).equals(true)
+		})
+
+		o("idk Setup overwrites KDF nonce with a random one if encrypting with AeadWithGroupKey", async function () {
+			authDataProvider.encryptionScheme = SymmetricEncryptionScheme.Aead
+			const ownerGroupKey: VersionedKey = { object: aes256RandomKey(), version: 0 }
+			const newCalendar = createTestEntity(tutanotaTypeRefs.CalendarEventTypeRef, {
+				_id: ["listId", "element"],
+				_permissions: "permissions",
+				_ownerGroup: ownerGroupId,
+			})
+			const resultId = "resultId"
+
+			const persistentPostReturn = createTestEntity(baseTypeRefs.PersistenceResourcePostReturnTypeRef, {
+				generatedId: resultId,
+				permissionListId: "permissionListId",
+			})
+
+			const untypedPersistentPostReturn = await instancePipeline.mapAndEncrypt(
+				baseTypeRefs.PersistenceResourcePostReturnTypeRef,
+				persistentPostReturn,
+				null,
+			)
+			when(restClient.request(`/rest/tutanota/calendarevent/listId`, HttpMethod.POST, matchers.anything()), { times: 1 }).thenResolve(
+				JSON.stringify(untypedPersistentPostReturn),
+			)
+
+			instancePipeline.mapAndEncrypt = spy(instancePipeline.mapAndEncrypt)
+
+			const originalKdfNonce = generateKdfNonce()
+			newCalendar._kdfNonce = originalKdfNonce
+
+			await entityRestClient.setup("listId", newCalendar, undefined, { ownerKey: ownerGroupKey })
+
+			o.check(arrayEquals(newCalendar._kdfNonce, originalKdfNonce)).equals(false)
+
+			o.check(instancePipeline.mapAndEncrypt.invocations.length).equals(1)
+			const invocation = instancePipeline.mapAndEncrypt.invocations[0]
+			const subKeyInfo: SubKeyInfo = invocation[2]
+			if (subKeyInfo == null || subKeyInfo.cipherVersion !== SymmetricCipherVersion.AeadWithGroupKey) {
+				throw new Error()
+			}
+			o.check(arrayEquals(subKeyInfo.kdfNonce!, newCalendar._kdfNonce!)).equals(true)
 		})
 
 		o("Setup list entity throws when no listid is passed", async function () {

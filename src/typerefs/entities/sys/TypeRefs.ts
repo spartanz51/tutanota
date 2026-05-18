@@ -4285,3 +4285,16 @@ export type UpdateKdfNoncePostIn = {
 
 	instanceKdfNonce: InstanceKdfNonce;
 }
+export const UpdateKdfNoncePostOutTypeRef: TypeRef<UpdateKdfNoncePostOut> = new TypeRef("sys", 2749)
+
+export function createUpdateKdfNoncePostOut(values: StrippedEntity<UpdateKdfNoncePostOut>): UpdateKdfNoncePostOut {
+    return Object.assign(create(typeModels[UpdateKdfNoncePostOutTypeRef.typeId], UpdateKdfNoncePostOutTypeRef), values)
+}
+
+export type UpdateKdfNoncePostOut = {
+	_type: TypeRef<UpdateKdfNoncePostOut>;
+	_original?: UpdateKdfNoncePostOut
+
+	_format: NumberString;
+	kdfNonce: Uint8Array;
+}

@@ -97,6 +97,7 @@ use crate::entities::generated::sys::TakeOverDeletedAddressData;
 use crate::entities::generated::sys::TimelockCaptchaGetIn;
 use crate::entities::generated::sys::TimelockCaptchaGetOut;
 use crate::entities::generated::sys::UpdateKdfNoncePostIn;
+use crate::entities::generated::sys::UpdateKdfNoncePostOut;
 use crate::entities::generated::sys::UpdatePermissionKeyData;
 use crate::entities::generated::sys::UpdateSessionKeysPostIn;
 use crate::entities::generated::sys::UpgradePriceServiceData;
@@ -423,7 +424,7 @@ crate::service_impl!(GET, TimelockCaptchaService, TimelockCaptchaGetIn, Timelock
 pub struct UpdateKdfNonceService;
 
 crate::service_impl!(declare, UpdateKdfNonceService, "sys/updatekdfnonceservice", 151);
-crate::service_impl!(POST, UpdateKdfNonceService, UpdateKdfNoncePostIn, ());
+crate::service_impl!(POST, UpdateKdfNonceService, UpdateKdfNoncePostIn, UpdateKdfNoncePostOut);
 
 
 pub struct UpdatePermissionKeyService;
