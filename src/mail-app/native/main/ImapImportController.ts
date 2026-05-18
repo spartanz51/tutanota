@@ -65,6 +65,7 @@ export class ImapImportController {
 			const config = getConfigForProvider(parseInt(imapAccountSyncState.provider) as ImapProvider).oauthConfig
 			if (config && imapAccountSyncState.imapAccount.tokenEndpointResponse?.refreshToken) {
 				const oauthHandler = new OauthHandler(config)
+				await oauthHandler.setupOauthLoginParams()
 				const tokenEndpointResponse = await oauthHandler.refreshTokens(imapAccountSyncState.imapAccount.tokenEndpointResponse?.refreshToken)
 				imapAccountSyncState.imapAccount.tokenEndpointResponse = tokenEndpointResponseToTutadbTokenEndpointResponse(tokenEndpointResponse)
 				await this.entityClient.update(imapAccountSyncState)

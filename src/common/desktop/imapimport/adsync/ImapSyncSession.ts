@@ -156,9 +156,8 @@ export class ImapSyncSession implements SyncSessionEventListener {
 		} catch (error) {
 			console.log("we are getting errors still, ", error)
 			let syncAction = ShutdownSyncAction.UNKNOWN
-			if (error?.serverResponseCode === "AUTHENTICATIONFAILED") {
+			if (error?.serverResponseCode === "AUTHENTICATIONFAILED" || error.authenticationFailed) {
 				return new ImapError(error, ImapErrorCause.AUTH_FAILED)
-			} else if (error?.serverResponseCode === "ACCESS TOKEN INVALID") {
 			} else {
 				// For now any other error we are postponing...
 				// TODO: Find which error cases are the valid ones for postponing.

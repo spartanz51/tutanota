@@ -1,5 +1,5 @@
 import * as client from "./openid-client-custom"
-import { Configuration, refreshTokenGrant } from "openid-client"
+import { Configuration } from "openid-client"
 import { OauthConfigParams } from "./ImapKnownConfigs"
 import { ProgrammingError } from "@tutao/app-env"
 
