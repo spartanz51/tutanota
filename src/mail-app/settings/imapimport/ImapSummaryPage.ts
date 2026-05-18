@@ -54,7 +54,7 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 	view(vnode: Vnode<WizardPageAttrs<ImapImportData>>): Children {
 		const data = vnode.attrs.data
 
-		return m(".mt-24", [
+		return m(".mt-24", { style: { maxHeight: "65vh" } }, [
 			this.renderExportInformation(data),
 			this.renderImportInformation(data),
 			data.matchImportFoldersToTutanotaFolders ? this.renderFolderMapping(data) : null,
