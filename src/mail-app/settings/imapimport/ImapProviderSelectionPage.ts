@@ -131,8 +131,6 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 
 export class ImapProviderSelectionPageAttrs implements WizardPageAttrs<ImapImportData> {
 	data: ImapImportData
-
-	stepTitle = "imapSyncFolderMapping_title" as TranslationKey
 	hideAllPagingButtons = true
 	hidePagingButtonForPage = true
 

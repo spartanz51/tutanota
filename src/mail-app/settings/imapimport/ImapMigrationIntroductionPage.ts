@@ -121,7 +121,7 @@ export class ImapMigrationIntroductionPageAttrs implements WizardPageAttrs<ImapI
 		return "imapImportSetup_title"
 	}
 
-	stepTitle = "imapImportSetup_title" as TranslationKey
+	stepTitle = "imapSyncCredentials_title" as TranslationKey
 
 	nextAction(showErrorDialog: boolean = true): Promise<boolean> {
 		// fixme add validation here

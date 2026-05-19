@@ -197,18 +197,19 @@ class WizardDialog<T> implements Component<WizardDialogAttrs<T>> {
 				"aria-label": "Breadcrumb",
 			},
 			//16px;
-			visiblePages.map((p, index) =>
-				m(".flex.flex-column.flex-grow", [
+			visiblePages.map((p, index) => {
+				return m(".flex.flex-column.flex-grow", [
 					m(WizardPagingButton, {
-						title: vnode.attrs.pages[index].attrs.stepTitle !== undefined ? vnode.attrs.pages[index].attrs.stepTitle : undefined,
+						//TODO: Talk about this one tomorrow?
+						title: p.attrs.stepTitle !== undefined ? p.attrs.stepTitle : undefined,
 						pageIndex: index,
 						getSelectedPageIndex: () => selectedIndex,
 						isClickable: () => a.allowedToVisitPage(index, selectedIndex),
 						navigateBackHandler: (index) => a._goToPageAction(index),
 					}),
 					m(".flex-grow.mt-8", { class: this.getLineClass(index < selectedIndex) }),
-				]),
-			),
+				])
+			}),
 		)
 	}
 

@@ -389,7 +389,7 @@ export class ConfigureImapImportPageAttrs implements WizardPageAttrs<ImapImportD
 		return "imapImportSetup_title"
 	}
 
-	stepTitle = "imapSyncFolderMapping_title" as TranslationKey
+	stepTitle = "imapSyncConfig_title" as TranslationKey
 
 	async nextAction(showErrorDialog: boolean = true): Promise<boolean> {
 		return Promise.resolve(true)

@@ -2358,3 +2358,5 @@ export type TranslationKeyType =
 	| "imapProviderOutlook_label"
 	| "imapSyncYahooWarning_msg"
 	| "imapConfigurationAddLabelInfo_msg"
+	| "ImapSyncEmail_title"
+	| "imapSyncConfig_title"

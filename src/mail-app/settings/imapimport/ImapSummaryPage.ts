@@ -369,8 +369,6 @@ export class ImapSummaryPageAttrs implements WizardPageAttrs<ImapImportData> {
 		return "imapImportSetup_title"
 	}
 
-	stepTitle = "imapSyncFolderMapping_title" as TranslationKey
-
 	hideAllPagingButtons = true
 	hidePagingButtonForPage = true
 
