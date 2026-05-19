@@ -6,8 +6,6 @@ import { lang, TranslationKey } from "../../../common/misc/LanguageViewModel"
 import { Icons } from "../../../common/gui/base/icons/Icons"
 import { TitleSection } from "../../../common/gui/base/TitleSection"
 import { px, size } from "../../../common/gui/size"
-import { ImapImportController } from "../../native/main/ImapImportController"
-import { mailLocator } from "../../mailLocator"
 import { theme } from "../../../common/gui/theme"
 import { getConfigForProvider, ImapAuthType, ImapProvider } from "../../../common/api/common/utils/imapImportUtils/ImapKnownConfigs"
 import { PrimaryButton } from "../../../common/gui/base/buttons/VariantButtons"
@@ -29,6 +27,10 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 
 	oncreate(vnode: VnodeDOM<WizardPageAttrs<ImapImportData>>) {
 		this.dom = vnode.dom as HTMLElement
+		vnode.attrs.data.isImapServerSupportingOAuth = false
+		vnode.attrs.data.oauthConfig = undefined
+		vnode.attrs.data.imapAccountHost = ""
+		vnode.attrs.data.imapAccountPort = 0
 	}
 
 	view(vnode: Vnode<WizardPageAttrs<ImapImportData>>): Children {

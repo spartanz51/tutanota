@@ -145,14 +145,8 @@ export class ImapSyncSession implements SyncSessionEventListener {
 		})
 
 		try {
-			await imapClient.connect()
-			const listTreeResponse = await imapClient.listTree()
-			await imapClient.logout()
+			const fetchedRootMailboxes = await this.getImapMailboxes(imapClient)
 
-			const fetchedRootMailboxes =
-				listTreeResponse.folders?.map((listTreeResponse) => {
-					return ImapMailbox.fromImapFlowListTreeResponse(listTreeResponse, null)
-				}) ?? []
 			return await this.getSyncSessionMailboxes(knownMailboxes, fetchedRootMailboxes)
 		} catch (error) {
 			console.log("we are getting errors still, ", error)
@@ -182,14 +176,25 @@ export class ImapSyncSession implements SyncSessionEventListener {
 			},
 		})
 
+		return await this.getImapMailboxes(imapClient)
+	}
+
+	/**
+	 * This retrieves the mailboxes for a particular client connection
+	 * @param imapClient A fully configured client instance.
+	 * @private
+	 */
+	private async getImapMailboxes(imapClient: ImapFlow): Promise<Array<ImapMailbox>> {
 		await imapClient.connect()
 		const listTreeResponse = await imapClient.listTree()
 		await imapClient.logout()
 
 		return (
-			listTreeResponse.folders?.map((listTreeResponse) => {
-				return ImapMailbox.fromImapFlowListTreeResponse(listTreeResponse, null)
-			}) ?? []
+			listTreeResponse.folders
+				?.filter((listTreeResponse) => !listTreeResponse.disabled)
+				.map((listTreeResponse) => {
+					return ImapMailbox.fromImapFlowListTreeResponse(listTreeResponse, null)
+				}) ?? []
 		)
 	}
 
