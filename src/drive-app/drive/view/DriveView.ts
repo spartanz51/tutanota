@@ -2,7 +2,7 @@ import { TopLevelAttrs, TopLevelView } from "../../../TopLevelView"
 import { DrawerMenuAttrs } from "../../../common/gui/nav/DrawerMenu"
 import { AppHeaderAttrs, Header, HeaderAttrs } from "../../../common/gui/Header"
 import m, { Children, Vnode } from "mithril"
-import { DriveOperationType, DriveViewModel, OperationUpdate } from "./DriveViewModel"
+import { DriveOperationType, DriveViewModel, OperationUpdate, SelectAllBehavior } from "./DriveViewModel"
 import { BaseTopLevelView } from "../../../common/gui/BaseTopLevelView"
 import { getFileBaseNameAndExtensions, WebFile } from "../../../common/api/common/utils/FileUtils"
 import { ViewSlider } from "../../../common/gui/nav/ViewSlider"
@@ -160,6 +160,24 @@ export class DriveView extends BaseTopLevelView implements TopLevelView<DriveVie
 
 		this.shortcuts = [
 			...listSelectionKeyboardShortcuts(MultiselectMode.Enabled, () => this.driveViewModel),
+			{
+				key: Keys.ESC,
+				enabled: () => true,
+				help: "clearFileSelection_action",
+				ctrlOrCmd: false,
+				exec: () => {
+					this.driveViewModel.selectNone()
+				},
+			},
+			{
+				key: Keys.A,
+				enabled: () => true,
+				help: "selectAllFiles_action",
+				ctrlOrCmd: true,
+				exec: () => {
+					this.driveViewModel.selectAll(SelectAllBehavior.Keep)
+				},
+			},
 			{
 				key: Keys.C,
 				enabled: () => true,

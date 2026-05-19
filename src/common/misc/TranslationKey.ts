@@ -2275,3 +2275,5 @@ export type TranslationKeyType =
 	| "light_green_label"
 	| "dark_green_label"
 	| "driveNotEnabled_msg"
+	| "selectAllFiles_action"
+	| "clearFileSelection_action"

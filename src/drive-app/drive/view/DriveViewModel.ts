@@ -97,6 +97,11 @@ export interface DriveClipboard {
 	action: ClipboardAction
 }
 
+export const enum SelectAllBehavior {
+	Toggle = "Toggle",
+	Keep = "Keep",
+}
+
 function emptyListModel<Item, Id>(): ListModel<Item, Id> {
 	return new ListModel({
 		async fetch(): Promise<ListFetchResult<Item>> {
@@ -650,10 +655,10 @@ export class DriveViewModel {
 		return this.listModel.areAllSelected()
 	}
 
-	selectAll() {
-		if (this.listModel.isSelectionEmpty()) {
+	selectAll(behaviour: SelectAllBehavior = SelectAllBehavior.Toggle) {
+		if (!this.areAllSelected()) {
 			this.listModel.selectAll()
-		} else {
+		} else if (behaviour === SelectAllBehavior.Toggle) {
 			this.listModel.selectNone()
 		}
 	}

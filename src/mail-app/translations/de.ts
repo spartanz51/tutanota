@@ -2274,6 +2274,8 @@ export default {
 		"yourMessage_label": "Deine Nachricht",
 		"zoomIn_action": "Hereinzoomen",
 		"zoomOut_action": "Herauszoomen",
-		"driveNotEnabled_msg": "Drive ist für dieses Konto nicht aktiviert"
+		"driveNotEnabled_msg": "Drive ist für dieses Konto nicht aktiviert",
+		"selectAllFiles_action": "Alle Dateien und Ordner auswählen",
+		"clearFileSelection_action": "Datei- und Ordnerauswahl leeren",
 	}
 }
