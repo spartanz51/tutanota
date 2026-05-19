@@ -43,7 +43,6 @@ import { SymmetricEncryptionScheme } from "../../../../crypto/encryption/symmetr
 import { generateKdfNonce, KdfNonce, validateKdfNonceLength } from "../../../../crypto/encryption/symmetric/SymmetricCipherUtils"
 import { createInstanceKdfNonce, createTypeInfo } from "../../../../typerefs/entities/sys/TypeRefs"
 import { SubKeyInfo } from "../../../../crypto/encryption/symmetric/encryption/SubKeyProvider"
-import { PreconditionFailedError } from "@tutao/rest-client/error"
 
 assertWorkerOrNode()
 

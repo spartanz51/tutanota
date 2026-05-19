@@ -81,6 +81,7 @@ import { InstanceSessionKeysCache } from "../facades/InstanceSessionKeysCache"
 import { isOfflineError } from "../../common/utils/ErrorUtils"
 import { NotFoundError } from "@tutao/rest-client/error"
 import { validateKdfNonceLength } from "../../../../crypto/encryption/symmetric/SymmetricCipherUtils"
+import { UpdateKdfNoncePostOut } from "../../../../typerefs/entities/sys/TypeRefs"
 
 assertWorkerOrNode()
 
@@ -915,7 +916,7 @@ export class CryptoFacade {
 		await this.serviceExecutor.post(sysServices.UpdateSessionKeysService, input)
 	}
 
-	async postUpdateKdfNonceService(instanceKdfNonce: sysTypeRefs.InstanceKdfNonce) {
+	async postUpdateKdfNonceService(instanceKdfNonce: sysTypeRefs.InstanceKdfNonce): Promise<UpdateKdfNoncePostOut> {
 		const input = sysTypeRefs.createUpdateKdfNoncePostIn({ instanceKdfNonce: instanceKdfNonce })
 		return await this.serviceExecutor.post(sysServices.UpdateKdfNonceService, input)
 	}
