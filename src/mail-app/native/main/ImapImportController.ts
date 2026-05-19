@@ -62,7 +62,8 @@ export class ImapImportController {
 		const importResult = await this.imapImporter.continueImport(imapAccountSyncStateId)
 		if (importResult.error && importResult.error.cause === ImapErrorCause.AUTH_FAILED) {
 			const imapAccountSyncState = await this.entityClient.load(tutanotaTypeRefs.ImportImapAccountSyncStateTypeRef, imapAccountSyncStateId)
-			const config = getConfigForProvider(parseInt(imapAccountSyncState.provider) as ImapProvider).oauthConfig
+			const provider = parseInt(imapAccountSyncState.provider) as ImapProvider
+			const config = getConfigForProvider(provider)?.oauthConfig
 			if (config && imapAccountSyncState.imapAccount.tokenEndpointResponse?.refreshToken) {
 				const oauthHandler = new OauthHandler(config)
 				await oauthHandler.setupOauthLoginParams()

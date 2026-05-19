@@ -93,7 +93,7 @@ const wellKnownConfigs = {
 	},
 }
 
-export function getConfigForProvider(provider: ImapProvider): ServerImapImportParams {
+export function getConfigForProvider(provider: ImapProvider): ServerImapImportParams | null {
 	switch (provider) {
 		case ImapProvider.Google:
 			return wellKnownConfigs.gmail
@@ -103,29 +103,16 @@ export function getConfigForProvider(provider: ImapProvider): ServerImapImportPa
 			throw new Error("Yahoo is not supported yet!")
 		case ImapProvider.Other:
 			return {
-				//FIXME: change back to secure
+				//FIXME: Remove this, other should not have a guess by default.
 				host: "localhost", //`imap.${domain}`,
 				port: "143", // IMAP_SSL_PORT,
 				authType: ImapAuthType.Password,
 			}
 	}
+
+	return null
 }
 export function getConfigForDomain(domain: string): ServerImapImportParams | null {
-	const isMicrosoftDomain = domain.includes("outlook.") || domain.includes("live.") || domain.includes("hotmail.") || domain.includes("msn.com")
-	if (isMicrosoftDomain) {
-		return wellKnownConfigs.microsoft
-	}
-
-	const isYahooDomain = domain.includes("yahoo.")
-	if (isYahooDomain) {
-		console.error("User attempting to import from Yahoo despite the message saying it is not possible")
-	}
-
-	const isGoogleDomain = domain.includes("gmail.com") || domain.includes("googlemail.com") || domain.includes("google.com")
-	if (isGoogleDomain) {
-		return wellKnownConfigs.gmail
-	}
-
 	const isGmxDomain = domain.includes("gmx")
 	if (isGmxDomain) {
 		return wellKnownConfigs.gmx
@@ -136,10 +123,5 @@ export function getConfigForDomain(domain: string): ServerImapImportParams | nul
 		return wellKnownConfigs.webde
 	}
 
-	return {
-		//FIXME: change back to secure
-		host: "localhost", //`imap.${domain}`,
-		port: "143", // IMAP_SSL_PORT,
-		authType: ImapAuthType.Password,
-	}
+	return null
 }
