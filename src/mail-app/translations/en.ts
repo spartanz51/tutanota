@@ -2357,7 +2357,7 @@ export default {
 		"imapImportActiveSync_label": "Active synchronizations",
 		"imapConfigurationLinkFoldersInfo_msg": "You can link each folder from your previous account to a matching folder in your Tuta account. This happens in the next step",
 		"imapSyncChooseProvider_msg": "Please choose the email provider you would like to sync with Tuta",
-		"imapProviderGoogle_label": "Google",
+		"imapProviderGmail_label": "Google Mail",
 		"imapProviderOutlook_label": "Outlook",
 		"imapProviderYahoo_label": "Yahoo",
 		"imapSyncYahooWarning_msg": "Synchronization with Yahoo is not possible. \n Please contact support if you have questions (or link to help desk explaining?)",

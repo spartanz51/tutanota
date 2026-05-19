@@ -1463,6 +1463,14 @@ styles.registerStyle("main", () => {
 			height: px(size.icon_32),
 			width: px(size.icon_32),
 		},
+		".icon-40": {
+			height: px(size.icon_40),
+			width: px(size.icon_40),
+		},
+		".icon-40 > svg": {
+			height: px(size.icon_40),
+			width: px(size.icon_40),
+		},
 		".icon-64": {
 			height: px(size.icon_64),
 			width: px(size.icon_64),

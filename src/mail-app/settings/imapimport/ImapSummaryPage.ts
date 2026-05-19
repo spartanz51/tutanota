@@ -163,6 +163,12 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 							name: getFolderName(indentedFolder.folder),
 							value: indentedFolder.folder,
 						})),
+						style: mailboxToRow.tutaMailSet
+							? {}
+							: {
+									background: theme.warning_container,
+									color: theme.on_warning_container,
+								},
 						icon: {
 							icon: !mailboxToRow.tutaMailSet ? Icons.FolderFilled : getFolderIconByType(mailboxToRow.tutaMailSet.folderType as MailSetKind),
 							color: theme.on_surface_variant,

@@ -3,14 +3,14 @@ import { ImapImportData } from "./AddImapImportWizard.js"
 import { assertMainOrNode } from "@tutao/app-env"
 import { emitWizardEvent, WizardEventType, WizardPageAttrs, WizardPageN } from "../../../common/gui/base/WizardDialog"
 import { lang, TranslationKey } from "../../../common/misc/LanguageViewModel"
-import { Icons } from "../../../common/gui/base/icons/Icons"
+import { GmailLogo, Icons, OutlookLogo } from "../../../common/gui/base/icons/Icons"
 import { TitleSection } from "../../../common/gui/base/TitleSection"
 import { px, size } from "../../../common/gui/size"
 import { theme } from "../../../common/gui/theme"
 import { getConfigForProvider, ImapAuthType, ImapProvider } from "../../../common/api/common/utils/imapImportUtils/ImapKnownConfigs"
 import { PrimaryButton } from "../../../common/gui/base/buttons/VariantButtons"
 import { Button, ButtonType } from "../../../common/gui/base/Button"
-import { Icon } from "../../../common/gui/base/Icon"
+import { Icon, IconSize } from "../../../common/gui/base/Icon"
 
 assertMainOrNode()
 
@@ -80,20 +80,17 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 
 	private renderOptionButtons(data: ImapImportData): Children {
 		const selectedItemClasses = ".border.border-radius.provider-selector"
-		return m(".flex.row.gap-16.mt-16.justify-center", [
+		return m(".flex.row.gap-16.mt-32.justify-center", [
 			m(
 				`${this.selectedProvider === ImapProvider.Google ? selectedItemClasses : ""}.provider-selector`,
 				m(Button, {
-					label: "imapProviderGoogle_label",
+					label: "imapProviderGmail_label",
 					click: () => {
 						this.titleSectionParams = initialTitleSectionParams
 						this.selectedProvider = ImapProvider.Google
 						data.imapAccountUsername = "@gmail.com"
 					},
-					icon: m(Icon, {
-						icon: Icons.FolderFilled,
-						class: "pr-4 flex items-center",
-					}),
+					icon: m(".flex.mr-8", m.trust(GmailLogo)),
 					class: ["content-fg"],
 					type: ButtonType.Secondary,
 				}),
@@ -107,10 +104,7 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 						this.selectedProvider = ImapProvider.Microsoft
 						data.imapAccountUsername = "@outlook.com"
 					},
-					icon: m(Icon, {
-						icon: Icons.KeyFilled,
-						class: "pr-4 flex items-center",
-					}),
+					icon: m(".flex.mr-8", m.trust(OutlookLogo)),
 					type: ButtonType.Secondary,
 				}),
 			),
@@ -123,6 +117,11 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 						this.selectedProvider = ImapProvider.Other
 						data.imapAccountUsername = ""
 					},
+					icon: m(Icon, {
+						icon: Icons.MailFilled,
+						size: IconSize.PX40,
+						class: "mr-8",
+					}),
 					type: ButtonType.Secondary,
 				}),
 			),
