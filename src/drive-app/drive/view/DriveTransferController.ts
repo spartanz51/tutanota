@@ -11,7 +11,7 @@ import { FileController } from "../../../common/file/FileController"
 import { Scheduler } from "../../../common/api/common/utils/Scheduler"
 import { FileReference, WebFile } from "../../../common/api/common/utils/FileUtils"
 
-type DriveTransferType = "upload" | "download"
+export type DriveTransferType = "upload" | "download"
 
 export interface DriveTransferState {
 	id: TransferId
@@ -45,7 +45,7 @@ type QueuedTransfer =
 type FileId = TransferId
 
 /** @private visibleForTesting */
-export const FINISHED_TRANSFER_RETAIN_TIMEOUT_MS = 4 * SECOND_IN_MILLIS
+export const FINISHED_TRANSFER_RETAIN_TIMEOUT_MS = 40000 * SECOND_IN_MILLIS
 
 export class DriveTransferController {
 	private queue: QueuedTransfer[] = []
