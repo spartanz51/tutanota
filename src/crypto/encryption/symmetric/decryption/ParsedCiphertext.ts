@@ -51,6 +51,28 @@ export type ParsedCiphertextAesCbc = ParsedCiphertextUnusedReservedUnauthenticat
 export type ParsedCiphertextAead = ParsedCiphertextAeadWithGroupKey | ParsedCiphertextAeadWithSessionKey
 export type ParsedCiphertext = ParsedCiphertextAesCbc | ParsedCiphertextAead
 
+// Ciphertexts come in many flavors, containing potentially many elements. Not all elements will be present in every
+// flavor, but they are always laid out in the same order. The following diagram illustrates the general format:
+//
+// |---------------------------------------------------------|
+// | V GKVL GKV |           IV            |     CT     | MAC |
+// |            |                         |------------|     |
+// |            |                         | ciphertext |     |
+// |            |--------------------------------------|     |
+// |            | initialization vector and ciphertext |     |
+// |            |--------------------------------------------|
+// |            |             tagged ciphertext              |
+// |---------------------------------------------------------|
+// |                  versioned ciphertext                   |
+// |---------------------------------------------------------|
+//
+// V: cipher version
+// GKVL: group key version length
+// GKV: group key version
+// IV: initialization vector
+// CT: ciphertext
+// MAC: message authentication code
+
 export function parseVersionedCiphertext(
 	versionedCiphertext: Uint8Array,
 	initializationVectorVariant: InitializationVectorVariant = InitializationVectorVariant.Random,
@@ -105,14 +127,14 @@ export function parseVersionedCiphertext(
 			return {
 				cipherVersion,
 				groupKeyVersion: assertNotNull(groupKeyVersion),
-				initializationVector: initializationVector,
+				initializationVector,
 				ciphertext,
 				macTag,
 			}
 		case SymmetricCipherVersion.AeadWithSessionKey:
 			return {
 				cipherVersion,
-				initializationVector: initializationVector,
+				initializationVector,
 				ciphertext,
 				macTag,
 			}

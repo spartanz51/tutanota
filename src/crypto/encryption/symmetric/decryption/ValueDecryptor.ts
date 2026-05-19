@@ -55,7 +55,7 @@ export class AeadWithGroupKeyDecryptor implements ValueDecryptor {
 
 	getValue(key: Nullable<AesKey>): Uint8Array {
 		if (key == null) {
-			throw new CryptoError("AEAD decryption of failed because of a missing group key.")
+			throw new CryptoError("AEAD decryption of a value failed because of a missing group key.")
 		}
 		const instanceAeadSubKeyCacheKey = {
 			cipherVersion: SymmetricCipherVersion.AeadWithGroupKey,

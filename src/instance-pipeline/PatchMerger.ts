@@ -117,13 +117,13 @@ export class PatchMerger {
 			const attributeId = pathResult.attributeId
 
 			const pathResultTypeModel = pathResult.typeModel
-			// We need to map and decrypt for REPLACE and ADDITEM as the payloads are encrypted, REMOVEITEM only has either aggregate ids, generated ids, or id tuples
+			// We need to map and decrypt for REPLACE and ADD_ITEM as the payloads are encrypted, REMOVE_ITEM only has either aggregate ids, generated ids, or id tuples
 			if (patch.patchOperation !== PatchOperationType.REMOVE_ITEM) {
 				const encryptedParsedValue: Nullable<EncryptedParsedValue | EncryptedParsedAssociation> = await this.parseValueOnPatch(pathResult, patch.value)
 				const isAggregation = pathResultTypeModel.associations[attributeId]?.type === AssociationType.Aggregation
 				const isEncryptedValue = pathResultTypeModel.values[attributeId]?.encrypted
 				const fieldPath: string = this.removeNetworkDebuggingSymbolsIfNeeded(patch.attributePath)
-				const needsDecryption = ((isAggregation && typeModel.encrypted) || isEncryptedValue) && instanceDecryptor.isDecryptionPossible()
+				const needsDecryption = ((isAggregation && typeModel.encrypted) || isEncryptedValue) && instanceDecryptor.canAttemptDecryption()
 				const value = needsDecryption
 					? await this.decryptValueOnPatch(pathResult, encryptedParsedValue, ownerGroup, instanceDecryptor, fieldPath)
 					: encryptedParsedValue

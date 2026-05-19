@@ -1,6 +1,12 @@
 import { AeadSubKeys, AesKey, SymmetricAeadCipherVersion, SymmetricAesCipherVersion, SymmetricSubKeys } from "@tutao/crypto"
 
-export function subKeyCache<K, S extends string | number | boolean, V>(serialize: (key: K) => S) {
+export interface SubKeyCache<K, V> {
+	set: (instanceSubKeyCacheKey: K, cachedSubKeys: V) => void
+	get: (instanceSubKeyCacheKey: K) => V | undefined
+	has: (instanceSubKeyCacheKey: K) => boolean
+}
+
+export function subKeyCache<K, S extends string | number | boolean, V>(serialize: (key: K) => S): SubKeyCache<K, V> {
 	const map = new Map<S, V>()
 
 	return {
@@ -14,12 +20,6 @@ export function subKeyCache<K, S extends string | number | boolean, V>(serialize
 			return map.has(serialize(key))
 		},
 	}
-}
-
-export interface SubKeyCache<K, V> {
-	set: (instanceSubKeyCacheKey: K, cachedSubKeys: V) => void
-	get: (instanceSubKeyCacheKey: K) => V | undefined
-	has: (instanceSubKeyCacheKey: K) => boolean
 }
 
 interface InstanceAesSubKeyCacheKey {

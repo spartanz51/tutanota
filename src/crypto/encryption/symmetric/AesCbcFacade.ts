@@ -40,7 +40,7 @@ export class AesCbcFacade {
 	): Uint8Array {
 		this.tryToEnforceAuthentication(subKeys, cipherVersion, authenticationEnforcement)
 		const usePadding = paddingStandard === PaddingStandard.Pkcs5
-		const cipherText = bitArrayToUint8Array(
+		const ciphertext = bitArrayToUint8Array(
 			sjcl.mode.cbc.encrypt(
 				new sjcl.cipher.aes(subKeys.encryptionKey),
 				uint8ArrayToBitArray(plainText),
@@ -51,11 +51,11 @@ export class AesCbcFacade {
 		)
 
 		let unauthenticatedCiphertext
-		if (initializationVector !== InitializationVectorVariant.Fixed) {
-			//version byte is not included into authentication tag for legacy reasons
-			unauthenticatedCiphertext = concat(initializationVector, cipherText)
+		if (initializationVector === InitializationVectorVariant.Fixed) {
+			unauthenticatedCiphertext = ciphertext
 		} else {
-			unauthenticatedCiphertext = cipherText
+			//version byte is not included into authentication tag for legacy reasons
+			unauthenticatedCiphertext = concat(initializationVector, ciphertext)
 		}
 		switch (cipherVersion) {
 			case SymmetricCipherVersion.UnusedReservedUnauthenticated:
@@ -91,8 +91,8 @@ export class AesCbcFacade {
 		} else if (parsedCiphertext.cipherVersion !== subKeys.cipherVersion) {
 			throw new ProgrammingError("mismatched sub-key and ciphertext cipher versions")
 		}
+		const usePadding = paddingStandard === PaddingStandard.Pkcs5
 		try {
-			const usePadding = paddingStandard === PaddingStandard.Pkcs5
 			return bitArrayToUint8Array(
 				sjcl.mode.cbc.decrypt(
 					new sjcl.cipher.aes(subKeys.encryptionKey),

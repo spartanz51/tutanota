@@ -69,13 +69,13 @@ export class AeadFacade {
 			sjcl.mode.ctr.encrypt(new sjcl.cipher.aes(subKeys.encryptionKey), uint8ArrayToBitArray(plaintext), uint8ArrayToBitArray(initializationVector), []),
 		)
 
-		const ivAndCiphertext = concat(initializationVector, aesCtrCiphertext)
-		const ivAndCiphertextLength = this.getSigned32BitIntegerFromNumberAsUint8Array(ivAndCiphertext.length)
+		const initializationVectorAndCiphertext = concat(initializationVector, aesCtrCiphertext)
+		const initializationVectorAndCiphertextLength = this.getSigned32BitIntegerFromNumberAsUint8Array(initializationVectorAndCiphertext.length)
 
 		const authenticationKey = bitArrayToUint8Array(subKeys.authenticationKey)
-		const tag = blake3Mac(authenticationKey, concat(ivAndCiphertextLength, ivAndCiphertext, associatedData))
+		const tag = blake3Mac(authenticationKey, concat(initializationVectorAndCiphertextLength, initializationVectorAndCiphertext, associatedData))
 
-		return concat(ivAndCiphertext, tag)
+		return concat(initializationVectorAndCiphertext, tag)
 	}
 
 	/**
@@ -84,9 +84,9 @@ export class AeadFacade {
 	decrypt(subKeys: AeadSubKeys, parsedCiphertext: ParsedCiphertextAead, associatedData: Uint8Array): Uint8Array {
 		this.validateKeyLength(subKeys)
 
-		const ivAndCiphertext = concat(parsedCiphertext.initializationVector, parsedCiphertext.ciphertext)
-		const ivAndCiphertextLength = this.getSigned32BitIntegerFromNumberAsUint8Array(ivAndCiphertext.length)
-		const authenticatedData = concat(ivAndCiphertextLength, ivAndCiphertext, associatedData)
+		const initializationVectorAndCiphertext = concat(parsedCiphertext.initializationVector, parsedCiphertext.ciphertext)
+		const initializationVectorAndCiphertextLength = this.getSigned32BitIntegerFromNumberAsUint8Array(initializationVectorAndCiphertext.length)
+		const authenticatedData = concat(initializationVectorAndCiphertextLength, initializationVectorAndCiphertext, associatedData)
 		const authenticationKey = bitArrayToUint8Array(subKeys.authenticationKey)
 		blake3MacVerify(authenticationKey, authenticatedData, parsedCiphertext.macTag)
 

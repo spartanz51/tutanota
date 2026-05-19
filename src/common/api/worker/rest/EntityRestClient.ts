@@ -631,14 +631,11 @@ export class EntityRestClient implements EntityRestInterface {
 			const sessionKey: Nullable<AesKey> = await this._crypto.setNewOwnerEncSessionKey(clientTypeModel, instance, ownerKey)
 			return { cipherVersion: SymmetricCipherVersion.AesCbcThenHmac, sessionKey }
 		} else {
-			let groupKey: VersionedKey
-			if (ownerKey != null) {
-				groupKey = ownerKey
-			} else {
+			if (ownerKey == null) {
 				if (instance._ownerGroup == null) {
 					throw new ProgrammingError("This instance has no owner group")
 				}
-				groupKey = await this._crypto.getCurrentSymGroupKey(instance._ownerGroup)
+				ownerKey = await this._crypto.getCurrentSymGroupKey(instance._ownerGroup)
 			}
 			if (instance._kdfNonce != null) {
 				// why do you have a KDF nonce at this point? is the instance a deep copy?
@@ -647,7 +644,7 @@ export class EntityRestClient implements EntityRestInterface {
 
 			const kdfNonce: KdfNonce = generateKdfNonce()
 			instance._kdfNonce = kdfNonce
-			return { cipherVersion: SymmetricCipherVersion.AeadWithGroupKey, groupKey, kdfNonce }
+			return { cipherVersion: SymmetricCipherVersion.AeadWithGroupKey, groupKey: ownerKey, kdfNonce }
 		}
 	}
 
@@ -662,7 +659,6 @@ export class EntityRestClient implements EntityRestInterface {
 				}
 				ownerKey = await this._crypto.getCurrentSymGroupKey(instance._ownerGroup)
 			}
-			instance._ownerKeyVersion = ownerKey.version.toString()
 			let kdfNonce: KdfNonce
 			if (instance._kdfNonce == null) {
 				let instanceList: Nullable<Id> = null

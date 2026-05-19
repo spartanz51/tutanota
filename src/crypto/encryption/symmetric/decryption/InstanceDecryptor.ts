@@ -72,7 +72,7 @@ export class InstanceDecryptor {
 		}
 	}
 
-	isDecryptionPossible(): boolean {
+	canAttemptDecryption(): boolean {
 		return this.sessionKey != null || this.kdfNonce != null
 	}
 }
