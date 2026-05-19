@@ -17,6 +17,7 @@ import { CircleLoadingBar, CircleLoadingBarAttrs } from "../../../common/gui/Cir
 export interface DriveTransferStackAttrs {
 	transfers: readonly DriveTransferState[]
 	cancelTransfer: (transferId: TransferId) => unknown
+	cancelAllTransfers: (transferIds: TransferId[]) => unknown
 }
 
 // register custom CSS property so that we can animate it.
@@ -44,49 +45,56 @@ export class DriveTransferStack implements Component<DriveTransferStackAttrs> {
 	getStackStatus(transfers: readonly DriveTransferState[]): TransferStackStatus {
 		let progressState: ProgressState
 		let mainText: string
-		let infoTextText: string
+		let infoText: Translation
 
 		const progressStatePerTransfer = transfers.map((transfer) => this.getProgressState(transfer.state))
-		const totalTransfers = transfers.length
 		const doneTransfers = progressStatePerTransfer.filter((state) => state === ProgressState.done).length
+		const totalTransfers = transfers.length
 
-		const allTransfersDone = progressStatePerTransfer.every((state) => state === ProgressState.done)
+		const allTransfersDone = doneTransfers === totalTransfers
 		if (allTransfersDone) {
 			progressState = ProgressState.done
-			mainText = "Done"
-			infoTextText = `${doneTransfers} of ${totalTransfers} completed`
+			mainText = lang.getTranslationText("transfersDone_label")
+			infoText = lang.getTranslation("transfersCompleted_msg", { "{done}": doneTransfers, "{total}": totalTransfers })
 		} else {
 			const anyTransferFailed = progressStatePerTransfer.some((state) => state === ProgressState.error)
 			if (anyTransferFailed) {
 				progressState = ProgressState.error
-				mainText = "Error"
-				infoTextText = "Something went wrong"
+				mainText = lang.getTranslationText("transfersFailed_label")
+				infoText = lang.getTranslation("transfersFailed_msg")
 			} else {
 				progressState = ProgressState.running
-				mainText = "Transferring …"
-				infoTextText = `${doneTransfers} of ${totalTransfers} completed`
+				mainText = lang.getTranslationText("transferring_label")
+				infoText = lang.getTranslation("transfersCompleted_msg", { "{done}": doneTransfers, "{total}": totalTransfers })
 			}
 		}
 
-		const infoText = lang.makeTranslation("test_transferStackInfoText", infoTextText)
-
-		const percentages = transfers.map((transfer) => (transfer.transferredSize / transfer.totalSize) * 100)
-
-		const accPercentages = percentages.reduce((acc, cur, index) => acc + cur, 0)
-
-		const percentage = Math.min(Math.round(accPercentages / transfers.length), 100)
+		const percentagesPerTransfer = transfers.map((transfer) => (transfer.transferredSize / transfer.totalSize) * 100)
+		const percentagesSum = percentagesPerTransfer.reduce((acc, cur, index) => acc + cur, 0)
+		const percentage = Math.min(Math.round(percentagesSum / transfers.length), 100)
 
 		return { progressState, percentage, mainText, infoText }
 	}
 
-	view({ attrs: { transfers, cancelTransfer } }: Vnode<DriveTransferStackAttrs>): Children {
+	view({ attrs: { transfers, cancelTransfer, cancelAllTransfers } }: Vnode<DriveTransferStackAttrs>): Children {
 		if (transfers.length === 0) {
 			return
 		}
 
 		const stackStatus = this.getStackStatus(transfers)
+		const notRunningTransfers = transfers.map((transfer) => this.getProgressState(transfer.state)).filter((state) => state !== ProgressState.running).length
 
-		const onCancel = () => console.log("transfer cancelled")
+		const transferSnackBars = transfers.map((transferState, index) => {
+			return m(ProgressSnackBar, {
+				key: transferState.id,
+				mainText: transferState.filename,
+				infoText: this.getStatusText(transferState.type, transferState.state),
+				iconOverride: () => this.renderStateIcon(transferState.type),
+				progressState: this.getProgressState(transferState.state),
+				percentage: Math.min(Math.round((transferState.transferredSize / transferState.totalSize) * 100), 100),
+				onCancel: () => cancelTransfer(transferState.id),
+			} satisfies ProgressSnackBarAttrs & { key: string })
+		})
 
 		return m(
 			".flex.col.abs.border-radius",
@@ -103,28 +111,29 @@ export class DriveTransferStack implements Component<DriveTransferStackAttrs> {
 			},
 			[
 				m(".flex.row.items-center.justify-between.items-center.pt-8.plr-4.pb-8", [
-					m(".flex.flex-grow.items-center.gap-16.overflow-hidden", [
-						this.renderProgress(stackStatus.progressState, stackStatus.percentage),
+					m(".flex.flex-grow.items-center.gap-16.overflow-hidden.pl-16", [
+						this.expanded ? null : this.renderProgress(stackStatus.progressState, stackStatus.percentage),
 						m(".flex.col.gap-8.flex-shrink.overflow-hidden", [
 							m(".font-weight-500.text-ellipsis", stackStatus.mainText),
 							stackStatus.infoText ? m(".small", { "data-testid": stackStatus.infoText.testId }, stackStatus.infoText.text) : null,
 						]),
 					]),
 
+					transfers.length === notRunningTransfers
+						? null
+						: m(IconButton, {
+								click: () => cancelAllTransfers(transfers.map((t) => t.id)),
+								icon: Icons.X,
+								title: "cancel_action",
+								size: ButtonSize.Normal,
+							}),
 					m(IconButton, {
 						click: () => {
 							this.expanded = !this.expanded
 						},
 						icon: this.expanded ? Icons.ChevronDown : Icons.ChevronUp,
-						title: "open_action", // FIXME: Introduce a more precise description.
-						size: ButtonSize.Large,
-					}),
-
-					m(IconButton, {
-						click: () => onCancel(),
-						icon: Icons.X,
-						title: "cancel_action",
-						size: ButtonSize.Large,
+						title: this.expanded ? "collapseTransferStack_label" : "expandTransferStack_label",
+						size: ButtonSize.Normal,
 					}),
 				]),
 			],
@@ -137,17 +146,7 @@ export class DriveTransferStack implements Component<DriveTransferStackAttrs> {
 								maxHeight: "calc(72px * 3)", // show at max three transfers without scrolling
 							},
 						},
-						transfers.map((transferState) => {
-							return m(ProgressSnackBar, {
-								key: transferState.id,
-								mainText: transferState.filename,
-								infoText: this.getStatusText(transferState.type, transferState.state),
-								iconOverride: () => this.renderStateIcon(transferState.type),
-								progressState: this.getProgressState(transferState.state),
-								percentage: Math.min(Math.round((transferState.transferredSize / transferState.totalSize) * 100), 100),
-								onCancel: () => cancelTransfer(transferState.id),
-							} satisfies ProgressSnackBarAttrs & { key: string })
-						}),
+						transferSnackBars,
 					)
 				: null,
 		)

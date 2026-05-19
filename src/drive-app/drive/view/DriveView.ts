@@ -435,6 +435,20 @@ export class DriveView extends BaseTopLevelView implements TopLevelView<DriveVie
 							m(DriveTransferStack, {
 								transfers: this.driveViewModel.transfers(),
 								cancelTransfer: (transferId) => this.driveViewModel.cancelTransfer(transferId),
+								cancelAllTransfers: async (transferIds) => {
+									const ok =
+										transferIds.length === 1
+											? true
+											: await Dialog.confirm(
+													lang.getTranslation("confirmCancelTransfers_msg", { "{count}": transferIds.length }),
+													"confirmCancelTransfers_action",
+												)
+									if (ok) {
+										for (const id of transferIds) {
+											this.driveViewModel.cancelTransfer(id)
+										}
+									}
+								},
 							}),
 						],
 						mobileHeader: () => this.renderMobileHeader(headerAttrs, showMoveItemDialog),
