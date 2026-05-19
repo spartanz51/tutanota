@@ -58,16 +58,20 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 						class: "wizard-next-button",
 						onclick: async (_, dom) => {
 							const imapConfig = getConfigForProvider(this.selectedProvider)
-							if (imapConfig.authType === ImapAuthType.Oauth2) {
-								vnode.attrs.data.isImapServerSupportingOAuth = true
-								vnode.attrs.data.oauthConfig = imapConfig.oauthConfig
+							const isConfigAvailableForSelectedProvider = imapConfig && this.selectedProvider !== ImapProvider.Other && imapConfig !== null
+							if (isConfigAvailableForSelectedProvider) {
+								if (imapConfig.authType === ImapAuthType.Oauth2) {
+									vnode.attrs.data.isImapServerSupportingOAuth = true
+									vnode.attrs.data.oauthConfig = imapConfig.oauthConfig
+								}
+								vnode.attrs.data.imapAccountHost = imapConfig.host
+								vnode.attrs.data.imapAccountPort = Number.parseInt(imapConfig.port)
+								vnode.attrs.data.imapProvider = this.selectedProvider
 							}
-							vnode.attrs.data.imapAccountHost = imapConfig.host
-							vnode.attrs.data.imapAccountPort = Number.parseInt(imapConfig.port)
-							vnode.attrs.data.imapProvider = this.selectedProvider
+
 							emitWizardEvent(dom, WizardEventType.SHOW_NEXT_PAGE)
 						},
-						disabled: this.selectedProvider === null || this.selectedProvider === ImapProvider.Yahoo,
+						disabled: this.selectedProvider === null,
 					}),
 				),
 			),
@@ -105,25 +109,6 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 					},
 					icon: m(Icon, {
 						icon: Icons.KeyFilled,
-						class: "pr-4 flex items-center",
-					}),
-					type: ButtonType.Secondary,
-				}),
-			),
-			m(
-				`${this.selectedProvider === ImapProvider.Yahoo ? selectedItemClasses : ""}.provider-selector`,
-				m(Button, {
-					label: "imapProviderYahoo_label",
-					click: () => {
-						this.selectedProvider = ImapProvider.Yahoo
-						this.titleSectionParams = {
-							icon: Icons.InfoFilled,
-							iconOptions: { color: theme.warning },
-							subTitle: lang.getTranslationText("imapSyncYahooWarning_msg"),
-						}
-					},
-					icon: m(Icon, {
-						icon: Icons.Paperclip,
 						class: "pr-4 flex items-center",
 					}),
 					type: ButtonType.Secondary,

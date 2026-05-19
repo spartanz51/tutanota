@@ -110,7 +110,7 @@ export class EnterImapCredentialsPage implements WizardPageN<ImapImportData> {
 						},
 					},
 					m(PrimaryButton, {
-						label: "next_action",
+						label: "continue_action",
 						class: "wizard-next-button",
 						onclick: async (_, dom) => {
 							if (vnode.attrs.data.isImapServerSupportingOAuth) {

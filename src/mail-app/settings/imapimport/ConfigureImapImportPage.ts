@@ -81,6 +81,7 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 			this.imapMailboxesToTutaFolders = await this.controller.constructImapMailboxesToTutaFoldersMap(imapMailboxResult.result)
 			this.successfullyLoadedMailboxes = true
 			this.titleSectionParams.iconOptions.class = ""
+			m.redraw()
 		} else if (imapMailboxResult.error) {
 			// TODO: Perhaps we can remove this
 			if (imapMailboxResult.error.cause !== ImapErrorCause.LIST_MAILBOX_FAILED) {
@@ -224,7 +225,7 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 				: null,
 			!this.shouldDisplayFolderTextField && this.controller ? this.renderFolderMapping(data) : null,
 			m(
-				".flex-center.full-width.pt-32.mb-32",
+				".flex-center.full-width.justify-end.pt-32.mb-32",
 				m(
 					"",
 					{
@@ -233,7 +234,7 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 						},
 					},
 					m(PrimaryButton, {
-						label: "startImapImport_action",
+						label: "continue_action",
 						class: "wizard-next-button",
 						onclick: (_, dom) => {
 							emitWizardEvent(dom, WizardEventType.SHOW_NEXT_PAGE)
@@ -247,6 +248,11 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 
 	private updateHoverMessage(textMessage: MaybeTranslation) {
 		return (event: MouseEvent) => {
+			const isDisplayingHoverForPressedButton = this.shouldDisplayHover && this.hoverInfo === textMessage
+			if (isDisplayingHoverForPressedButton) {
+				this.shouldDisplayHover = false
+				return
+			}
 			const target = event.target as Element
 			const button = target.closest(".icon-button")
 			const dialogWindow = target.closest('[role="dialog"]')
@@ -266,7 +272,7 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 					top: hoverWindowTop,
 				}
 
-				this.shouldDisplayHover = !this.shouldDisplayHover
+				this.shouldDisplayHover = true
 			}
 		}
 	}

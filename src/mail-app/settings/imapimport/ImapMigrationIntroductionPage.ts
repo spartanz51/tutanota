@@ -14,6 +14,8 @@ import { theme } from "../../../common/gui/theme"
 import { DropDownSelectorNew, DropDownSelectorNewAttrs } from "../../../common/gui/base/DropDownSelectorNew"
 import { TextField } from "../../../common/gui/base/TextField"
 import { PrimaryButton } from "../../../common/gui/base/buttons/VariantButtons"
+import { ImapProvider } from "../../../common/api/common/utils/imapImportUtils/ImapKnownConfigs"
+import { guessServerImapConfigFromEmail } from "../../../common/api/common/utils/imapImportUtils/ImapImportUtils"
 
 assertMainOrNode()
 
@@ -65,9 +67,18 @@ export class ImapMigrationIntroductionPage implements WizardPageN<ImapImportData
 						},
 					},
 					m(PrimaryButton, {
-						label: "next_action",
+						label: "continue_action",
 						class: "wizard-next-button",
 						onclick: async (_, dom) => {
+							if (vnode.attrs.data.imapProvider === ImapProvider.Other) {
+								//Get settings if user is not using IMAP and if none exist, allow the user
+								//to set it up.
+								const imapConfig = guessServerImapConfigFromEmail(vnode.attrs.data.imapAccountUsername)
+								if (imapConfig) {
+									vnode.attrs.data.imapAccountHost = imapConfig.host
+									vnode.attrs.data.imapAccountPort = Number.parseInt(imapConfig.port)
+								}
+							}
 							emitWizardEvent(dom, WizardEventType.SHOW_NEXT_PAGE)
 						},
 					}),

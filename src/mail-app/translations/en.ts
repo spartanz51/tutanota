@@ -1969,7 +1969,7 @@ export default {
 		"startAfterEnd_label": "The start date must not be after the end date.",
 		"startTime_label": "Start time",
 		"startWithFreeAccount_action": "Start with a free account",
-		"startImapImport_action": "Start IMAP import",
+		"startImapImport_action": "Set up synchronization",
 		"startingImapImport_msg": "Starting IMAP import ...",
 		"state_label": "Status",
 		"stillReferencedFromContactForm_msg": "This item can not be deactivated because it is still referenced from a contact form.",
