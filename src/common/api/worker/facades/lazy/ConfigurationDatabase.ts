@@ -15,6 +15,7 @@ import {
 	decryptKey,
 	generateInitializationVector,
 	InitializationVector,
+	validateInitializationVectorLength,
 	VersionedKey,
 } from "@tutao/crypto"
 import { UserFacade } from "../UserFacade.js"
@@ -32,7 +33,6 @@ import { AutosaveFacade, decodeLocalAutosavedDraftData, encodeLocalAutosavedDraf
 import { decodeSpamClassificationModel, encodeSpamClassificationModel, SpamClassifierStorageFacade } from "./SpamClassifierStorageFacade"
 import { SpamClassificationModel } from "../../../../../mail-app/workerUtils/spamClassification/SpamClassifier.js"
 import { entityUpdateUtils, sysTypeRefs } from "@tutao/typerefs"
-import { validateInitializationVectorLength } from "../../../../../crypto/encryption/symmetric/SymmetricCipherUtils"
 
 const VERSION: number = 5
 const DB_KEY_PREFIX: string = "ConfigStorage"

@@ -39,7 +39,7 @@ import { ProgrammingError } from "@tutao/app-env"
 import { BlobAccessTokenFacade } from "../../../../../src/common/api/worker/facades/BlobAccessTokenFacade.js"
 import { clientInitializedTypeModelResolver, createTestEntity, instancePipelineFromTypeModelResolver, removeOriginals } from "../../../TestUtils.js"
 import { InstancePipeline } from "@tutao/instance-pipeline"
-import { aes256RandomKey, AesKey, CryptoWrapper, decryptKey, KdfNonce, SymmetricCipherVersion, VersionedKey } from "@tutao/crypto"
+import { aes256RandomKey, AesKey, CryptoWrapper, decryptKey, generateKdfNonce, KdfNonce, SubKeyInfo, SymmetricCipherVersion, VersionedKey } from "@tutao/crypto"
 import { EntityClient } from "../../../../../src/common/api/common/EntityClient"
 import { ServiceExecutor } from "../../../../../src/common/api/worker/rest/ServiceExecutor"
 import { DefaultEntityRestCache } from "../../../../../src/common/api/worker/rest/DefaultEntityRestCache"
@@ -49,8 +49,6 @@ import { PublicEncryptionKeyProvider } from "../../../../../src/common/api/worke
 import { KeyRotationFacade } from "../../../../../src/common/api/worker/facades/KeyRotationFacade"
 import { InstanceSessionKeysCache } from "../../../../../src/common/api/worker/facades/InstanceSessionKeysCache"
 import { SymmetricEncryptionScheme } from "@tutao/crypto/symmetric-cipher-facade"
-import { SubKeyInfo } from "../../../../../src/crypto/encryption/symmetric/encryption/SubKeyProvider"
-import { generateKdfNonce } from "@tutao/crypto/symmetric-cipher-utils"
 
 const { anything, argThat } = matchers
 

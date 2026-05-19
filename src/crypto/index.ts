@@ -157,9 +157,12 @@ export {
 	type Aes256Key,
 	INITIALIZATION_VECTOR_LENGTH_BYTES,
 	FIXED_INITIALIZATION_VECTOR,
-	generateInitializationVector,
 	type InitializationVector,
 	type KdfNonce,
+	generateInitializationVector,
+	generateKdfNonce,
+	validateInitializationVectorLength,
+	validateKdfNonceLength,
 } from "./encryption/symmetric/SymmetricCipherUtils.js"
 export { AesKeyLength, getAndVerifyAesKeyLength, getKeyLengthInBytes } from "./encryption/symmetric/AesKeyLength.js"
 export { blake3Hash, blake3Mac, blake3MacVerify, blake3Kdf } from "./hashes/Blake3.js"
@@ -170,9 +173,12 @@ export {
 	SymmetricKeyDeriver,
 	type SymmetricSubKeys,
 	type AeadSubKeys,
+	type AeadWithGroupKeySubKeys,
+	type AeadWithSessionKeySubKeys,
 	type AesSubKeys,
 	type AesCbcThenHmacSubKeys,
 	type UnusedReservedUnauthenticatedSubKeys,
+	type InstanceTypeId,
 } from "./encryption/symmetric/SymmetricKeyDeriver.js"
 export {
 	SymmetricCipherVersion,
@@ -190,3 +196,4 @@ export { MissingSessionKey } from "./encryption/symmetric/decryption/InstanceDec
 export { type ValueDecryptor } from "./encryption/symmetric/decryption/ValueDecryptor"
 export { AEAD_ATTRIBUTE_ON_UNAUTHENTICATED_INSTANCE_SESSION_KEY_DOMAIN } from "./encryption/symmetric/decryption/InstanceDecryptor"
 export { AEAD_ATTRIBUTE_ON_UNAUTHENTICATED_INSTANCE_GROUP_KEY_DOMAIN } from "./encryption/symmetric/decryption/InstanceDecryptor"
+export { SubKeyInfo, SubKeyProvider } from "./encryption/symmetric/encryption/SubKeyProvider"

@@ -10,12 +10,9 @@ import {
 } from "@tutao/typerefs"
 import { ModelMapper } from "./ModelMapper"
 import { downcast, lazy, Nullable, TypeRef } from "@tutao/utils"
-import { AesKey, SymmetricCipherFacade, SymmetricCipherVersion } from "@tutao/crypto"
+import { AesKey, SubKeyInfo, SymmetricCipherFacade, SymmetricCipherVersion, validateKdfNonceLength } from "@tutao/crypto"
 import { isWebClient, ProgrammingError } from "@tutao/app-env"
 import { EntityAdapter } from "./EntityAdapter"
-import { validateKdfNonceLength } from "../crypto/encryption/symmetric/SymmetricCipherUtils"
-
-import { SubKeyInfo } from "../crypto/encryption/symmetric/encryption/SubKeyProvider"
 
 function isSubKeyInfo(sessionKeyOrSubKeyInfo: Promise<Nullable<AesKey>> | Nullable<AesKey> | SubKeyInfo): sessionKeyOrSubKeyInfo is SubKeyInfo {
 	return sessionKeyOrSubKeyInfo != null && (sessionKeyOrSubKeyInfo as SubKeyInfo)?.cipherVersion !== undefined

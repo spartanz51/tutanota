@@ -1,12 +1,14 @@
-import { FIXED_INITIALIZATION_VECTOR, INITIALIZATION_VECTOR_LENGTH_BYTES, InitializationVector, SymmetricCipherVersion } from "@tutao/crypto"
+import {
+	FIXED_INITIALIZATION_VECTOR,
+	INITIALIZATION_VECTOR_LENGTH_BYTES,
+	InitializationVector,
+	SymmetricCipherVersion,
+	validateInitializationVectorLength,
+} from "@tutao/crypto"
 import { assertNotNull, isKeyVersion, KeyVersion, Nullable } from "@tutao/utils"
 import { MacTag } from "../../../misc/Constants"
 import { CryptoError } from "@tutao/crypto/error"
-import {
-	SYMMETRIC_AUTHENTICATION_TAG_LENGTH_BYTES,
-	SYMMETRIC_CIPHER_VERSION_PREFIX_LENGTH_BYTES,
-	validateInitializationVectorLength,
-} from "../SymmetricCipherUtils"
+import { SYMMETRIC_AUTHENTICATION_TAG_LENGTH_BYTES, SYMMETRIC_CIPHER_VERSION_PREFIX_LENGTH_BYTES } from "../SymmetricCipherUtils"
 
 export enum InitializationVectorVariant {
 	Fixed = "fixedInitializationVector",

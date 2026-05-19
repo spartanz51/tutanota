@@ -34,8 +34,7 @@ import {
 	AesKey,
 	decryptKey,
 	generateInitializationVector,
-	INITIALIZATION_VECTOR_LENGTH_BYTES,
-	random,
+	validateInitializationVectorLength,
 	VersionedKey,
 } from "@tutao/crypto"
 import { InfoMessageHandler } from "../../../common/gui/InfoMessageHandler.js"
@@ -57,7 +56,6 @@ import { EncryptedDbWrapper } from "../../../common/api/worker/search/EncryptedD
 import { DateProvider } from "../../../common/api/common/DateProvider"
 import { IndexingNotSupportedError } from "../../../common/api/common/error/IndexingNotSupportedError"
 import { OutOfSyncError } from "../../../common/api/common/error/OutOfSyncError"
-import { validateInitializationVectorLength } from "../../../crypto/encryption/symmetric/SymmetricCipherUtils"
 
 export type InitParams = {
 	user: sysTypeRefs.User

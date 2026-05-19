@@ -36,7 +36,11 @@ import {
 	AesKey,
 	DomainSeparator,
 	InstanceDecryptor,
+	InstanceTypeId,
+	KdfNonce,
 	MissingSessionKey,
+	SubKeyInfo,
+	SubKeyProvider,
 	SymmetricCipherFacade,
 	SymmetricCipherVersion,
 	VersionedKey,
@@ -44,10 +48,6 @@ import {
 import { convertDbToJsType, convertJsToDbType, decompressString, ModelMapper, valueToDefault } from "./ModelMapper.js"
 import { isWebClient, ProgrammingError } from "@tutao/app-env"
 import { EntityAdapter } from "./EntityAdapter.js"
-import { KdfNonce } from "../crypto/encryption/symmetric/SymmetricCipherUtils"
-import { SubKeyInfo, SubKeyProvider } from "../crypto/encryption/symmetric/encryption/SubKeyProvider"
-
-import { InstanceTypeId } from "../crypto/encryption/symmetric/SymmetricKeyDeriver"
 
 export interface SymmetricGroupKeyLoader {
 	loadSymGroupKey(groupId: Id, requestedVersion: KeyVersion, currentGroupKey?: VersionedKey): Promise<AesKey>

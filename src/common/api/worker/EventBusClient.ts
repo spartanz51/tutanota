@@ -4,7 +4,6 @@ import {
 	AttributeModel,
 	Entity,
 	entityUpdateUtils,
-	GENERATED_MIN_ID,
 	hasError,
 	ServerModelParsedInstance,
 	ServerModelUntypedInstance,
@@ -34,7 +33,7 @@ import { ExposedProgressTracker } from "../main/ProgressTracker"
 import { ProgressMonitorDelegate } from "./ProgressMonitorDelegate"
 import { filterIndexMemberships } from "../common/utils/IndexUtils"
 import { EventQueue, QueuedBatch } from "./EventQueue"
-import { validateKdfNonceLength } from "../../../crypto/encryption/symmetric/SymmetricCipherUtils"
+import { validateKdfNonceLength } from "@tutao/crypto"
 
 assertWorkerOrNode()
 

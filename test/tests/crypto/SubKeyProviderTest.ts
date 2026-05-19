@@ -1,10 +1,17 @@
 import o, { assertThrows } from "@tutao/otest"
-import { aes256RandomKey, KdfNonce, SymmetricCipherVersion, SymmetricKeyDeriver, VersionedKey } from "@tutao/crypto"
+import {
+	aes256RandomKey,
+	generateKdfNonce,
+	KdfNonce,
+	SubKeyInfo,
+	SubKeyProvider,
+	SymmetricCipherVersion,
+	SymmetricKeyDeriver,
+	VersionedKey,
+} from "@tutao/crypto"
 import { object } from "testdouble"
-import { SubKeyInfo, SubKeyProvider } from "../../../src/crypto/encryption/symmetric/encryption/SubKeyProvider"
 import { ClientTypeModel } from "@tutao/typerefs"
 import { CryptoError } from "@tutao/crypto/error"
-import { generateKdfNonce } from "@tutao/crypto/symmetric-cipher-utils"
 import { AppNameEnum } from "@tutao/utils"
 
 o.spec("SubKeyProviderTest", () => {

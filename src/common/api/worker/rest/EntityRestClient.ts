@@ -34,15 +34,23 @@ import { SetupMultipleError } from "../../common/error/SetupMultipleError"
 import { AuthDataProvider } from "../facades/UserFacade"
 import { LoginIncompleteError } from "../../common/error/LoginIncompleteError.js"
 import { BlobAccessTokenFacade } from "../facades/BlobAccessTokenFacade.js"
-import { AesKey, cryptoUtils, SymmetricCipherVersion, VersionedEncryptedKey, VersionedKey } from "@tutao/crypto"
+import {
+	AesKey,
+	cryptoUtils,
+	generateKdfNonce,
+	KdfNonce,
+	SubKeyInfo,
+	SymmetricCipherVersion,
+	validateKdfNonceLength,
+	VersionedEncryptedKey,
+	VersionedKey,
+} from "@tutao/crypto"
 import { isOfflineError } from "../../common/utils/ErrorUtils.js"
 import { EntityAdapter, InstancePipeline } from "@tutao/instance-pipeline"
 import { expandId } from "./RestClientIdUtils"
 import { Category, syncMetrics } from "../utils/SyncMetrics"
 import { SymmetricEncryptionScheme } from "../../../../crypto/encryption/symmetric/SymmetricCipherFacade"
-import { generateKdfNonce, KdfNonce, validateKdfNonceLength } from "../../../../crypto/encryption/symmetric/SymmetricCipherUtils"
 import { createInstanceKdfNonce, createTypeInfo } from "../../../../typerefs/entities/sys/TypeRefs"
-import { SubKeyInfo } from "../../../../crypto/encryption/symmetric/encryption/SubKeyProvider"
 
 assertWorkerOrNode()
 
