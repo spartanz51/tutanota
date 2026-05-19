@@ -52,6 +52,7 @@ import {
 	KeyLength,
 	keyToUint8Array,
 	sha256Hash,
+	SymmetricEncryptionScheme,
 	TotpSecret,
 	TotpVerifier,
 	uint8ArrayToKey,
@@ -74,7 +75,6 @@ import { CacheManagementFacade } from "./lazy/CacheManagementFacade.js"
 import { RolloutFacade } from "./RolloutFacade"
 import { LoginIncompleteError } from "../../common/error/LoginIncompleteError"
 import { ApplicationTypesFacade } from "./ApplicationTypesFacade"
-import { SymmetricEncryptionScheme } from "../../../../crypto/encryption/symmetric/SymmetricCipherFacade"
 
 assertWorkerOrNode()
 

@@ -1335,12 +1335,7 @@ o.spec("EntityRestClient", function () {
 			newAccountingInfo._ownerKeyVersion = ownerEncSessionKey.encryptingKeyVersion.toString()
 
 			when(restClient.request(anything(), anything(), anything())).thenResolve(null)
-			await entityRestClient.update(newAccountingInfo, {
-				ownerKeyProvider: async (version: KeyVersion) => {
-					o(version).equals(ownerGroupKey.version)
-					return ownerGroupKey.object
-				},
-			})
+			await entityRestClient.update(newAccountingInfo, { ownerKey: ownerGroupKey })
 
 			verify(
 				restClient.request(
@@ -1407,12 +1402,7 @@ o.spec("EntityRestClient", function () {
 				createTestEntity(sysTypeRefs.UpdateKdfNoncePostOutTypeRef, { kdfNonce: postIn.instanceKdfNonce.kdfNonce }),
 			)
 
-			await entityRestClient.update(calendarEvent, {
-				ownerKeyProvider: async (version: KeyVersion) => {
-					o(version).equals(ownerGroupKey.version)
-					return ownerGroupKey.object
-				},
-			})
+			await entityRestClient.update(calendarEvent, { ownerKey: ownerGroupKey })
 
 			o.check(calendarEvent._kdfNonce).notEquals(null)
 
@@ -1466,12 +1456,7 @@ o.spec("EntityRestClient", function () {
 				createTestEntity(sysTypeRefs.UpdateKdfNoncePostOutTypeRef, { kdfNonce }),
 			)
 
-			await entityRestClient.update(calendarEvent, {
-				ownerKeyProvider: async (version: KeyVersion) => {
-					o(version).equals(ownerGroupKey.version)
-					return ownerGroupKey.object
-				},
-			})
+			await entityRestClient.update(calendarEvent, { ownerKey: ownerGroupKey })
 
 			o.check(calendarEvent._kdfNonce).notEquals(null)
 
@@ -1521,12 +1506,7 @@ o.spec("EntityRestClient", function () {
 			calendarEvent.summary = "totally different"
 			calendarEvent._ownerKeyVersion = ownerGroupKey.version.toString()
 
-			await entityRestClient.update(calendarEvent, {
-				ownerKeyProvider: async (version: KeyVersion) => {
-					o(version).equals(ownerGroupKey.version)
-					return ownerGroupKey.object
-				},
-			})
+			await entityRestClient.update(calendarEvent, { ownerKey: ownerGroupKey })
 
 			verify(serviceExecutor.post(sysServices.UpdateKdfNonceService, matchers.anything()), { times: 0 })
 

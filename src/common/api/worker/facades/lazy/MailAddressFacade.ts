@@ -309,11 +309,15 @@ export class MailAddressFacade {
 	}
 
 	private async updateMailboxProperties(mailboxProperties: tutanotaTypeRefs.MailboxProperties, viaUser?: Id): Promise<tutanotaTypeRefs.MailboxProperties> {
+		const ownerKey = viaUser
+			? await this.adminKeyLoaderFacade.getCurrentGroupKeyViaUser(assertNotNull(mailboxProperties._ownerGroup), viaUser)
+			: await this.adminKeyLoaderFacade.getCurrentGroupKeyViaAdminEncGKey(assertNotNull(mailboxProperties._ownerGroup))
+		await this.nonCachingEntityClient.update(mailboxProperties, { ownerKey })
+
 		const groupKeyProvider = async (version: KeyVersion) =>
 			viaUser
 				? await this.adminKeyLoaderFacade.getGroupKeyViaUser(assertNotNull(mailboxProperties._ownerGroup), version, viaUser)
 				: await this.adminKeyLoaderFacade.getGroupKeyViaAdminEncGKey(assertNotNull(mailboxProperties._ownerGroup), version)
-		await this.nonCachingEntityClient.update(mailboxProperties, { ownerKeyProvider: groupKeyProvider })
 		return await this.nonCachingEntityClient.load(tutanotaTypeRefs.MailboxPropertiesTypeRef, mailboxProperties._id, { ownerKeyProvider: groupKeyProvider })
 	}
 

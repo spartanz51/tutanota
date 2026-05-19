@@ -1,11 +1,10 @@
-import { Aes256Key, AesKey, cryptoUtils, CryptoWrapper, decryptKey, VersionedKey } from "@tutao/crypto"
+import { Aes256Key, AesKey, cryptoUtils, CryptoWrapper, decryptKey, SymmetricEncryptionScheme, VersionedKey } from "@tutao/crypto"
 import { assertNotNull, KeyVersion } from "@tutao/utils"
 import { GroupType, ProgrammingError } from "@tutao/app-env"
 import { isSameId, sysTypeRefs } from "@tutao/typerefs"
 import { LoginIncompleteError } from "../../common/error/LoginIncompleteError"
 import { KeyCache } from "./KeyCache.js"
 import { CryptoError } from "@tutao/crypto/error"
-import { SymmetricEncryptionScheme } from "../../../../crypto/encryption/symmetric/SymmetricCipherFacade"
 
 export interface AuthDataProvider {
 	/**

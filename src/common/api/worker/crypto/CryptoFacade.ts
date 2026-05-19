@@ -118,9 +118,13 @@ export class CryptoFacade {
 	}
 
 	async resolveSessionKeyWithOwnerKeyProvider(ownerKeyProvider: OwnerKeyProvider | undefined, migratedEntity: Entity): Promise<Nullable<AesKey>> {
+		const ownerKey = await ownerKeyProvider?.(cryptoUtils.parseKeyVersion(migratedEntity._ownerKeyVersion ?? "0"))
+		return this.resolveSessionKeyWithOwnerKey(ownerKey, migratedEntity)
+	}
+
+	async resolveSessionKeyWithOwnerKey(ownerKey: AesKey | undefined, migratedEntity: Entity): Promise<Nullable<AesKey>> {
 		try {
-			if (ownerKeyProvider && migratedEntity._ownerEncSessionKey) {
-				const ownerKey = await ownerKeyProvider(cryptoUtils.parseKeyVersion(migratedEntity._ownerKeyVersion ?? "0"))
+			if (ownerKey && migratedEntity._ownerEncSessionKey) {
 				return this.decryptSessionKeyWithOwnerKey(migratedEntity._ownerEncSessionKey, ownerKey)
 			} else {
 				return await this.resolveSessionKey(migratedEntity)

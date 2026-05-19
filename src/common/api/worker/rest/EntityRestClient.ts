@@ -29,18 +29,18 @@ import {
 } from "@tutao/typerefs"
 import { SessionKeyNotFoundError } from "@tutao/crypto/error"
 import { assertNotNull, downcast, KeyVersion, lazy, Mapper, Nullable, ofClass, promiseMap, splitInChunks, TypeRef } from "@tutao/utils"
-import { assertWorkerOrNode } from "@tutao/app-env"
+import { assertWorkerOrNode, ProgrammingError } from "@tutao/app-env"
 import { SetupMultipleError } from "../../common/error/SetupMultipleError"
 import { AuthDataProvider } from "../facades/UserFacade"
 import { LoginIncompleteError } from "../../common/error/LoginIncompleteError.js"
 import { BlobAccessTokenFacade } from "../facades/BlobAccessTokenFacade.js"
 import {
 	AesKey,
-	cryptoUtils,
 	generateKdfNonce,
 	KdfNonce,
 	SubKeyInfo,
 	SymmetricCipherVersion,
+	SymmetricEncryptionScheme,
 	validateKdfNonceLength,
 	VersionedEncryptedKey,
 	VersionedKey,
@@ -49,8 +49,6 @@ import { isOfflineError } from "../../common/utils/ErrorUtils.js"
 import { EntityAdapter, InstancePipeline } from "@tutao/instance-pipeline"
 import { expandId } from "./RestClientIdUtils"
 import { Category, syncMetrics } from "../utils/SyncMetrics"
-import { SymmetricEncryptionScheme } from "../../../../crypto/encryption/symmetric/SymmetricCipherFacade"
-import { createInstanceKdfNonce, createTypeInfo } from "../../../../typerefs/entities/sys/TypeRefs"
 
 assertWorkerOrNode()
 
@@ -66,8 +64,8 @@ export interface EntityRestClientSetupOptions {
 
 export interface EntityRestClientUpdateOptions {
 	baseUrl?: string
-	/** Use the key provided by this to decrypt the existing ownerEncSessionKey instead of trying to resolve the owner key based on the ownerGroup. */
-	ownerKeyProvider?: OwnerKeyProvider
+	/** Use this key to encrypt session key instead of trying to resolve the owner key based on the ownerGroup. */
+	ownerKey?: VersionedKey
 }
 
 export interface EntityRestClientEraseOptions {
@@ -595,11 +593,11 @@ export class EntityRestClient implements EntityRestInterface {
 			elementId,
 			undefined,
 			undefined,
-			options?.ownerKeyProvider,
+			options?.ownerKey,
 		)
 		// map and encrypt instance._original and the instance
 		const originalParsedInstance = await this.instancePipeline.modelMapper.mapToClientModelParsedInstance(instance._type, assertNotNull(instance._original))
-		const subKeyInfo = await this.getSubKeyInfoOnUpdate(options?.ownerKeyProvider, instance)
+		const subKeyInfo = await this.getSubKeyInfoOnUpdate(options?.ownerKey, instance)
 		const parsedInstance = await this.instancePipeline.modelMapper.mapToClientModelParsedInstance(instance._type as TypeRef<any>, instance)
 		const typeReferenceResolver = this.typeModelResolver.resolveClientTypeReference.bind(this.typeModelResolver)
 		const encryptedParsedInstance = await this.instancePipeline.cryptoMapper.encryptParsedInstance(clientTypeModel, parsedInstance, subKeyInfo)
@@ -637,7 +635,10 @@ export class EntityRestClient implements EntityRestInterface {
 			if (ownerKey != null) {
 				groupKey = ownerKey
 			} else {
-				groupKey = await this._crypto.getCurrentSymGroupKey(instance._ownerGroup ?? "0")
+				if (instance._ownerGroup == null) {
+					throw new ProgrammingError("This instance has no owner group")
+				}
+				groupKey = await this._crypto.getCurrentSymGroupKey(instance._ownerGroup)
 			}
 			if (instance._kdfNonce != null) {
 				// why do you have a KDF nonce at this point? is the instance a deep copy?
@@ -650,18 +651,18 @@ export class EntityRestClient implements EntityRestInterface {
 		}
 	}
 
-	private async getSubKeyInfoOnUpdate<T extends SomeEntity>(ownerKeyProvider: OwnerKeyProvider | undefined, instance: T): Promise<SubKeyInfo> {
+	private async getSubKeyInfoOnUpdate<T extends SomeEntity>(ownerKey: VersionedKey | undefined, instance: T): Promise<SubKeyInfo> {
 		if (this.authDataProvider.getDefaultSymmetricEncryptionScheme() === SymmetricEncryptionScheme.AesCbc) {
-			const sessionKey: Nullable<AesKey> = await this._crypto.resolveSessionKeyWithOwnerKeyProvider(ownerKeyProvider, instance)
+			const sessionKey: Nullable<AesKey> = await this._crypto.resolveSessionKeyWithOwnerKey(ownerKey?.object, instance)
 			return { cipherVersion: SymmetricCipherVersion.AesCbcThenHmac, sessionKey }
 		} else {
-			let groupKey: VersionedKey
-			if (ownerKeyProvider) {
-				const keyVersion = cryptoUtils.parseKeyVersion(instance._ownerKeyVersion ?? "0")
-				groupKey = { object: await ownerKeyProvider(keyVersion), version: keyVersion }
-			} else {
-				groupKey = await this._crypto.getCurrentSymGroupKey(instance._ownerGroup ?? "0")
+			if (!ownerKey) {
+				if (instance._ownerGroup == null) {
+					throw new ProgrammingError("This instance has no owner group")
+				}
+				ownerKey = await this._crypto.getCurrentSymGroupKey(instance._ownerGroup)
 			}
+			instance._ownerKeyVersion = ownerKey.version.toString()
 			let kdfNonce: KdfNonce
 			if (instance._kdfNonce == null) {
 				let instanceList: Nullable<Id> = null
@@ -674,16 +675,16 @@ export class EntityRestClient implements EntityRestInterface {
 				}
 				const application = instance._type.app
 				const typeId = instance._type.typeId.toString()
-				const typeInfo = createTypeInfo({ application, typeId })
+				const typeInfo = sysTypeRefs.createTypeInfo({ application, typeId })
 				const out = await this._crypto.postUpdateKdfNonceService(
-					createInstanceKdfNonce({ kdfNonce: generateKdfNonce(), instanceId, instanceList, typeInfo }),
+					sysTypeRefs.createInstanceKdfNonce({ kdfNonce: generateKdfNonce(), instanceId, instanceList, typeInfo }),
 				)
 				kdfNonce = validateKdfNonceLength(out.kdfNonce)
 				instance._kdfNonce = kdfNonce
 			} else {
 				kdfNonce = validateKdfNonceLength(instance._kdfNonce)
 			}
-			return { cipherVersion: SymmetricCipherVersion.AeadWithGroupKey, groupKey, kdfNonce }
+			return { cipherVersion: SymmetricCipherVersion.AeadWithGroupKey, groupKey: ownerKey, kdfNonce }
 		}
 	}
 
