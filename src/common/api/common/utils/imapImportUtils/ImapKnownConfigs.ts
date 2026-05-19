@@ -123,5 +123,10 @@ export function getConfigForDomain(domain: string): ServerImapImportParams | nul
 		return wellKnownConfigs.webde
 	}
 
-	return null
+	return {
+		//FIXME: Remove this, other should not have a guess by default.
+		host: "localhost", //`imap.${domain}`,
+		port: "143", // IMAP_SSL_PORT,
+		authType: ImapAuthType.Password,
+	}
 }

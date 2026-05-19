@@ -67,7 +67,8 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 			!data.addLabelToImportedMails ||
 			(data.imapSyncLabelData !== null && data.imapSyncLabelData.name !== "" && isValidCSSHexColor(data.imapSyncLabelData.color))
 		const isParentFolderCorrectlySet = data.rootImportMailFolderName !== "" || data.matchImportFoldersToTutanotaFolders
-		const shouldAllowContinuing = isLabelCorrectlySet && isParentFolderCorrectlySet
+		const isInEditMode = this.enableParentFolderEdit || this.enableFolderMappingEdit
+		const shouldAllowContinuing = isLabelCorrectlySet && isParentFolderCorrectlySet && !isInEditMode
 
 		return m(
 			".flex-end.full-width.pt-32.mb-32",
