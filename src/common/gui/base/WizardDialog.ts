@@ -140,7 +140,7 @@ class WizardDialog<T> implements Component<WizardDialogAttrs<T>> {
 		const visiblePages = enabledPages.filter((page) => !page.attrs.hidePagingButtonForPage)
 		const lastIndex = visiblePages.length - 1
 		//If any page has a stepTitle, all pages should have it and we must render with index and title.
-		const shouldDisplayBreadcrumbsBelowIndexAndTitle = vnode.attrs.pages[0].attrs.stepTitle !== undefined
+		const shouldDisplayBreadcrumbsBelowIndexAndTitle = vnode.attrs.pages.some((page) => page.attrs.stepTitle !== undefined)
 
 		return m(
 			"#wizardDialogContent.pt-16",
