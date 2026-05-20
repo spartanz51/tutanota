@@ -94,21 +94,26 @@ export class ImportImapFacade {
 		return importImapAccountSyncState
 	}
 
-	async pauseImapImport(importImapAccountSyncStateId: IdTuple): Promise<tutanotaTypeRefs.ImportImapAccountSyncState> {
+	async pauseRunningImapImportFolderSyncStates(importImapAccountSyncStateId: IdTuple): Promise<tutanotaTypeRefs.ImportImapAccountSyncState> {
 		const importImapAccountSyncState = await this.entityClient.load(tutanotaTypeRefs.ImportImapAccountSyncStateTypeRef, importImapAccountSyncStateId)
 		const imapFolderSyncStates = await this.getAllImportImapFolderSyncStates(importImapAccountSyncState.imapFolderSyncStateList)
 		for (const imapFolderSyncState of imapFolderSyncStates) {
-			imapFolderSyncState.status = ImportImapFolderSyncStatus.Paused
-			await this.entityClient.update(imapFolderSyncState)
+			if (imapFolderSyncState.status !== ImportImapFolderSyncStatus.Finished) {
+				imapFolderSyncState.status = ImportImapFolderSyncStatus.Paused
+				await this.entityClient.update(imapFolderSyncState)
+			}
 		}
 		return importImapAccountSyncState
 	}
 
-	async setAllImportImapFolderSyncStatesToFinished(importImapAccountSyncStateId: IdTuple): Promise<tutanotaTypeRefs.ImportImapAccountSyncState> {
+	async updateAllImportImapFolderSyncStates(
+		importImapAccountSyncStateId: IdTuple,
+		status: ImportImapFolderSyncStatus,
+	): Promise<tutanotaTypeRefs.ImportImapAccountSyncState> {
 		const importImapAccountSyncState = await this.entityClient.load(tutanotaTypeRefs.ImportImapAccountSyncStateTypeRef, importImapAccountSyncStateId)
 		const imapFolderSyncStates = await this.getAllImportImapFolderSyncStates(importImapAccountSyncState.imapFolderSyncStateList)
 		for (const imapFolderSyncState of imapFolderSyncStates) {
-			imapFolderSyncState.status = ImportImapFolderSyncStatus.Finished
+			imapFolderSyncState.status = status
 			await this.entityClient.update(imapFolderSyncState)
 		}
 		return importImapAccountSyncState

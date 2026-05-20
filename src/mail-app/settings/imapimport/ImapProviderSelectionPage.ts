@@ -82,7 +82,7 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 		const selectedItemClasses = ".border.border-radius.provider-selector"
 		return m(".flex.row.gap-16.mt-32.justify-center", [
 			m(
-				`${this.selectedProvider === ImapProvider.Google ? selectedItemClasses : ""}.provider-selector`,
+				`${this.selectedProvider === ImapProvider.Google ? selectedItemClasses : ""}.provider-selector.p-4`,
 				m(Button, {
 					label: "imapProviderGmail_label",
 					click: () => {
@@ -96,7 +96,7 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 				}),
 			),
 			m(
-				`${this.selectedProvider === ImapProvider.Microsoft ? selectedItemClasses : ""}.provider-selector`,
+				`${this.selectedProvider === ImapProvider.Microsoft ? selectedItemClasses : ""}.provider-selector.p-4`,
 				m(Button, {
 					label: "imapProviderOutlook_label",
 					click: () => {
@@ -109,7 +109,7 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 				}),
 			),
 			m(
-				`${this.selectedProvider === ImapProvider.Other ? selectedItemClasses : ""}.provider-selector`,
+				`${this.selectedProvider === ImapProvider.Other ? selectedItemClasses : ""}.provider-selector.p-4`,
 				m(Button, {
 					label: "other_label",
 					click: () => {

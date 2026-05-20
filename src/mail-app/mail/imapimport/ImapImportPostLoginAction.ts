@@ -14,6 +14,7 @@ import { ImapProvider } from "../../../common/api/common/utils/imapImportUtils/I
 import { ImapErrorCause } from "../../../common/desktop/imapimport/adsync/imapmail/ImapError"
 import { Dialog } from "../../../common/gui/base/Dialog"
 import { TranslationKey } from "../../../common/misc/LanguageViewModel"
+import { ImportImapFolderSyncStatus } from "@tutao/app-env"
 
 /**
  * continue an IMAP import after login if there is one.
@@ -53,6 +54,13 @@ export class ImapImportPostLoginAction implements PostLoginAction {
 										imapAccountSyncState.rootImportMailFolder,
 									)
 									rootImportMailFolderName = rootMailFolder.name
+								}
+								const imapFolderSyncStates = await this.entityClient.loadAll(
+									tutanotaTypeRefs.ImportImapFolderSyncStateTypeRef,
+									imapAccountSyncState.imapFolderSyncStateList,
+								)
+								if (imapFolderSyncStates.every((imapFolderSyncState) => imapFolderSyncState.status === ImportImapFolderSyncStatus.Paused)) {
+									return
 								}
 								let imapSyncLabelData: Nullable<tutanotaTypeRefs.ManageLabelServiceLabelData> = null
 								if (imapAccountSyncState.imapSyncLabel) {
@@ -113,6 +121,7 @@ export class ImapImportPostLoginAction implements PostLoginAction {
 										e,
 									)
 								}
+								await this.imapImportController.initImapAccountSyncStates()
 							},
 							priority: SyncDonePriority.LOW,
 						})

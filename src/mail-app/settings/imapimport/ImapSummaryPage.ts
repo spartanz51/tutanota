@@ -204,13 +204,6 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 		)
 	}
 
-	getFolderItems(data: ImapImportData) {
-		return data.folderSystem.getIndentedList(null).map((indentedFolder) => ({
-			name: getFolderName(indentedFolder.folder),
-			value: indentedFolder.folder,
-		}))
-	}
-
 	private renderFolderMappingReadonlyMode(
 		imapMailboxToTutaFolderRows: {
 			imapMailbox: ImapMailbox
@@ -311,7 +304,7 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 					leadingIcon: { icon: Icons.FolderFilled, color: theme.on_surface_variant },
 					injectionsRight: () => {
 						return m(IconButton, {
-							title: "label_label",
+							title: "editFolder_action",
 							icon: Icons.PenFilled,
 							click: () => {
 								this.enableParentFolderEdit = !this.enableParentFolderEdit
@@ -337,8 +330,17 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 								onClick: noOp,
 							})
 						: null,
+					data.imapSyncLabelData
+						? m(IconButton, {
+								title: "delete_action",
+								icon: Icons.TrashFilled,
+								click: () => {
+									data.imapSyncLabelData = null
+								},
+							})
+						: null,
 					m(IconButton, {
-						title: "label_label",
+						title: "editLabel_action",
 						icon: Icons.PenFilled,
 						click: () => {
 							if (!data.imapSyncLabelData) {
@@ -425,9 +427,6 @@ export class ImapSummaryPageAttrs implements WizardPageAttrs<ImapImportData> {
 			// not the post
 			if (initializeResult.error.cause === ImapErrorCause.AUTH_FAILED) {
 				this.data.isModifyingExistingImport = true
-			}
-			if (initializeResult.result && initializeResult.result.remoteStateId) {
-				this.data.imapImportState = await imapImportController.loadImapImportState(initializeResult.result.remoteStateId)
 			}
 
 			if (initializeResult.error.cause === ImapErrorCause.AUTH_FAILED_REFRESH_TOKEN) {

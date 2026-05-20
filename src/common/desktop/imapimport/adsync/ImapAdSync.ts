@@ -8,11 +8,11 @@ const defaultAdSyncConfig: AdSyncConfig = {
 	isEnableParallelProcessesOptimizer: false,
 	parallelProcessesOptimizationDifference: 2,
 	processesTimeToLive: 15,
-	isEnableDownloadBatchSizeOptimizer: true,
+	isEnableDownloadBatchSizeOptimizer: false,
 	downloadBatchSizeOptimizationDifference: 100,
-	defaultDownloadBatchSize: 500,
+	defaultDownloadBatchSize: 50,
 	optimizationInterval: 10,
-	emitAdSyncEventTypes: new Set<AdSyncEventType>([AdSyncEventType.CREATE, AdSyncEventType.UPDATE, AdSyncEventType.DELETE]),
+	emitAdSyncEventTypes: new Set<AdSyncEventType>([AdSyncEventType.CREATE]),
 	isEnableImapQresync: true,
 }
 

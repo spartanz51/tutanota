@@ -2336,7 +2336,7 @@ export default {
 		"imapSyncCredentialsInfo_msg": "Please enter the email address of the account you want to synchronize.\nIf you have shared mailboxes, you can choose those as destination.",
 		"ImapImportDestination_label": "Import destination",
 		"imapAddLabelToImportedMails_label": "Do you want to add a label to the imported mails?",
-		"imapSyncInProgressInfo_msg": "Synchronizing your emails",
+		"imapSyncInProgressInfo_msg": "Synchronizing your emails: {completed} / {total} folders completed",
 		"imapSyncPostponed_msg": "Synchronizing limit reached for today, will continue {postponedUntil}.",
 		"imapSyncIntroductionInfo_msg": "Please enter the login credentials of the account you want to synchronize",
 		"imapSyncConfigInfo_msg": "Choose where imported emails go. You can map the folders to the existing ones in your tuta account or create a new parent folder for them",
@@ -2353,7 +2353,7 @@ export default {
 		"imapImportSummaryParentFolder_label": "Parent folder name",
 		"imapSyncFolderMappingEditConfirmButton_label": "Confirm folders",
 		"imapImportSetupFinished_msg": "Your synchronization is active now",
-		"imapSyncInProgressAccounts_msg": "{sourceAddress} to {tutaMailbox}",
+		"imapSyncInProgressAccounts_msg": "{sourceAddress} to\n{tutaMailbox}",
 		"imapImportActiveSync_label": "Active synchronizations",
 		"imapConfigurationLinkFoldersInfo_msg": "You can link each folder from your previous account to a matching folder in your Tuta account. This happens in the next step",
 		"imapSyncChooseProvider_msg": "Please choose the email provider you would like to sync with Tuta",
@@ -2364,5 +2364,6 @@ export default {
 		"imapConfigurationAddLabelInfo_msg": "A label is connected to a color to help you visually find the e-mails faster.",
 		"ImapSyncEmail_title": "E-Mail",
 		"imapSyncConfig_title": "Configuration",
+		"imapImportCancelConfirm_msg": "Are you sure you want to permanently remove the synchronization? This action cannot be undone!",
 	}
 }

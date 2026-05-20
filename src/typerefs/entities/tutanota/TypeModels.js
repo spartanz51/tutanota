@@ -10270,7 +10270,7 @@ const typeModels = {
 				"encrypted": true
 			},
 			"1863": {
-				"final": false,
+				"final": true,
 				"name": "password",
 				"id": 1863,
 				"type": "String",

@@ -15,19 +15,22 @@ import { TitleSection } from "../../../common/gui/base/TitleSection"
 import { PrimaryButton } from "../../../common/gui/base/buttons/VariantButtons"
 import { mailLocator } from "../../mailLocator"
 import { FolderSystem } from "../../../common/api/common/mail/FolderSystem"
-import { Icon, IconSize } from "../../../common/gui/base/Icon"
+import { Icon, IconAttrs, IconSize } from "../../../common/gui/base/Icon"
 import { getMailboxName } from "../../../common/mailFunctionality/SharedMailUtils"
 import { assertNotNull } from "@tutao/utils"
 import { MenuTitle } from "../../../common/gui/titles/MenuTitle"
 import { ImapErrorCause } from "../../../common/desktop/imapimport/adsync/imapmail/ImapError"
 import { ImapProvider } from "../../../common/api/common/utils/imapImportUtils/ImapKnownConfigs"
+import { Card } from "../../../common/gui/base/Card"
+import { Dialog } from "../../../common/gui/base/Dialog"
+import { showProgressDialog } from "../../../common/gui/dialogs/ProgressDialog"
 
 assertMainOrNode()
 
 class ImapImportSettingsViewer implements UpdatableSettingsViewer {
 	private imapImportStates: Map<string, ActiveImport> = new Map()
 	private imapImportController: ImapImportController | null = null
-
+	private disableButtons: boolean = false
 	constructor() {}
 
 	async oninit() {
@@ -114,53 +117,89 @@ class ImapImportSettingsViewer implements UpdatableSettingsViewer {
 			if (accountSyncStateId === undefined) {
 				return null
 			}
-			if (!imapImportController.shouldRenderCancelButton(accountSyncStateId)) {
-				return null
-			}
 
-			const buttons: any[] = []
+			const buttons: Children[] = []
 			if (imapImportController.shouldRenderPauseButton(accountSyncStateId)) {
-				buttons.push(
-					m(IconButton, {
-						title: "pauseImapImport_action",
-						icon: Icons.PauseOutline,
-						size: ButtonSize.Normal,
-						click: () => {
-							imapImportController.pauseImport(accountSyncStateId).then(() => this.updateUiState())
-						},
-					}),
-				)
+				if (activeImport.syncProgress?.completed === activeImport.syncProgress?.total || activeImport.imapImportState.state === ImportState.POSTPONED) {
+					buttons.push(
+						m(IconButton, {
+							title: "resumeMailImport_action",
+							icon: Icons.Refresh,
+							size: ButtonSize.Normal,
+							disabled: this.disableButtons,
+							click: () => {
+								this.disableButtons = true
+								imapImportController.continueImport(accountSyncStateId).then(async () => {
+									await this.updateUiState()
+									this.disableButtons = false
+								})
+							},
+						}),
+					)
+				} else {
+					buttons.push(
+						m(IconButton, {
+							title: "pauseImapImport_action",
+							icon: Icons.PauseOutline,
+							size: ButtonSize.Normal,
+							disabled: this.disableButtons,
+							click: () => {
+								this.disableButtons = true
+								imapImportController.pauseImport(accountSyncStateId).then(async () => {
+									await this.updateUiState()
+									this.disableButtons = false
+								})
+							},
+						}),
+					)
+				}
 			}
-			if (imapImportController.shouldRenderResumeButton(accountSyncStateId)) {
+			if (imapImportController.shouldRenderResyncButton(accountSyncStateId)) {
 				buttons.push(
 					m(IconButton, {
 						title: "resumeMailImport_action",
-						icon: Icons.PlayOutline,
+						icon: imapImportController.shouldRenderPauseIcon(accountSyncStateId) ? Icons.PlayOutline : Icons.Refresh,
 						size: ButtonSize.Normal,
+						disabled: this.disableButtons,
 						click: () => {
-							imapImportController.continueImport(accountSyncStateId).then((result) => {
+							this.disableButtons = true
+							imapImportController.continueImport(accountSyncStateId).then(async (result) => {
 								if (result.error?.cause === ImapErrorCause.AUTH_FAILED_REFRESH_TOKEN) {
 								}
-								this.updateUiState()
+								await this.updateUiState()
+								this.disableButtons = false
 							})
 						},
 					}),
 				)
 			}
-			if (imapImportController.shouldRenderCancelButton(accountSyncStateId)) {
-				buttons.push(
-					m(IconButton, {
-						title: "cancel_action",
-						icon: Icons.X,
-						size: ButtonSize.Normal,
-						click: () => {
-							imapImportController.deleteImport(accountSyncStateId).then(() => this.updateUiState())
-						},
-					}),
-				)
-			}
+			buttons.push(
+				m(IconButton, {
+					title: "cancel_action",
+					icon: Icons.X,
+					size: ButtonSize.Normal,
+					disabled: this.disableButtons,
+					click: () => {
+						this.disableButtons = true
+						return Dialog.confirm("imapImportCancelConfirm_msg").then((confirmed) => {
+							if (confirmed) {
+								showProgressDialog(
+									"pleaseWait_msg",
+									imapImportController.deleteImport(accountSyncStateId).then(async () => {
+										await this.updateUiState()
+									}),
+								)
+							}
+							this.disableButtons = false
+						})
+					},
+				}),
+			)
 
-			let syncMessage = lang.getTranslation("imapSyncInProgressInfo_msg")
+			let syncMessage = lang.getTranslation("imapSyncInProgressInfo_msg", {
+				"{completed}": activeImport.syncProgress?.completed.toString() ?? "-",
+				"{total}": activeImport.syncProgress?.total.toString() ?? "-",
+			})
 			if (activeImport.imapImportState.state === ImportState.POSTPONED) {
 				syncMessage = lang.getTranslation("imapSyncPostponed_msg", {
 					"{postponedUntil}": activeImport.imapImportState.postponedUntil.toLocaleTimeString(),
@@ -172,19 +211,37 @@ class ImapImportSettingsViewer implements UpdatableSettingsViewer {
 				"{sourceAddress}": activeImport.remoteMailAddress,
 				"{tutaMailbox}": destinationTutaMailbox,
 			})
-			return m(".nav-bg.border-radius.flex.items-center.justify-between.p-16.surface-background", [
-				m(".flex.items-center.gap-16", [
-					m(Icon, {
-						icon: Icons.Sync,
-						size: IconSize.PX24,
-						style: {
-							fill: theme.on_surface,
-						},
-					}),
-					m(".pl-4.pr-32.flex.items-base.flex-column", [m("", syncSourceAndDestinationMessage.text), m(".small", syncMessage.text)]),
+
+			const statusIcon = imapImportController.shouldRenderPauseIcon(accountSyncStateId)
+				? Icons.PauseOutline
+				: imapImportController.shouldRenderClockIcon(accountSyncStateId)
+					? Icons.ClockOutlines
+					: activeImport.syncProgress?.completed === activeImport.syncProgress?.total
+						? Icons.Checkmark
+						: Icons.Sync
+			const statusIconParameters: Partial<IconAttrs> = {
+				icon: statusIcon,
+				class: statusIcon === Icons.Sync ? "icon-progress" : "",
+				style: {
+					fill: statusIcon === Icons.Checkmark ? theme.success : statusIcon === Icons.PauseOutline ? theme.warning : theme.on_surface,
+				},
+			}
+			return m(
+				Card,
+				m(".flex.items-center.justify-between", [
+					m(".flex.items-center.gap-16", [
+						m(Icon, {
+							...statusIconParameters,
+							size: IconSize.PX32,
+						} as IconAttrs),
+						m(".pl-4.pr-32.items-base.flex-column", [
+							m(".text-preline.text-ellipsis", syncSourceAndDestinationMessage.text),
+							m(".small", syncMessage.text),
+						]),
+					]),
+					m(".flex-column.items-center", buttons),
 				]),
-				m(".flex.items-center.gap-16", [...buttons]),
-			])
+			)
 		})
 	}
 

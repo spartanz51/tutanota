@@ -2360,3 +2360,4 @@ export type TranslationKeyType =
 	| "imapConfigurationAddLabelInfo_msg"
 	| "ImapSyncEmail_title"
 	| "imapSyncConfig_title"
+	| "imapImportCancelConfirm_msg"

@@ -15,7 +15,7 @@ import { assertNotNull, first, getFirstOrThrow, isEmpty, uint8ArrayToString } fr
 import { sha256Hash } from "@tutao/crypto"
 import { MaybePromise } from "rollup"
 import { elementIdPart, tutanotaTypeRefs } from "@tutao/typerefs"
-import { ProgrammingError } from "@tutao/app-env"
+import { ImportImapFolderSyncStatus, ProgrammingError } from "@tutao/app-env"
 import { ImapImportDataFile, ImapImportTutanotaFileId, ImportMailFacade, ImportMailParams } from "../../../common/api/worker/facades/lazy/ImportMailFacade"
 import { SuspensionError } from "../../../common/api/common/error/SuspensionError"
 import { ImapImportFacade } from "../../../common/native/common/generatedipc/ImapImportFacade"
@@ -58,7 +58,6 @@ export type ImportResult = {
 	error?: ImapError
 }
 
-// fixme since this class is so stateful, it is difficult to refactor it to make multiple simultaneous imports work
 export class ImapImporter implements ImapImportFacade {
 	private sessions: Map<string, ImapImportSession> = new Map()
 
@@ -68,9 +67,6 @@ export class ImapImporter implements ImapImportFacade {
 		private readonly importMailFacade: ImportMailFacade,
 	) {}
 
-	/**
-		TODO: This function has side effects *AND* returns data, perhaps do only one of those?
-	 */
 	async initializeImport(initializeParams: InitializeImapImportParams): Promise<ImportResult> {
 		const syncState = await this.getImportImapAccountSyncState(initializeParams)
 		let accountSyncState: tutanotaTypeRefs.ImportImapAccountSyncState
@@ -135,13 +131,15 @@ export class ImapImporter implements ImapImportFacade {
 
 		session.deduplicatedImportedAttachmentHashToFileId = await this.getImportedImapAttachmentHashToIdMap(session)
 
-		const startImportResult = await this.imapImportSystemFacade.startImport(imapAccountSyncStateId, imapSyncState)
+		const startImportError = await this.imapImportSystemFacade.startImport(imapAccountSyncStateId, imapSyncState)
 
-		if (startImportResult !== null) {
+		if (startImportError !== null) {
 			session.imapImportState = new ImapImportState(ImportState.PAUSED)
-			return Promise.resolve({ error: startImportResult, result: { state: session.imapImportState } })
+			await this.importImapFacade.updateAllImportImapFolderSyncStates(session.importImapAccountSyncState._id, ImportImapFolderSyncStatus.Paused)
+			return Promise.resolve({ error: startImportError, result: { state: session.imapImportState } })
 		} else {
 			session.imapImportState = new ImapImportState(ImportState.RUNNING)
+			await this.importImapFacade.updateAllImportImapFolderSyncStates(session.importImapAccountSyncState._id, ImportImapFolderSyncStatus.Running)
 			return Promise.resolve({ result: { state: session.imapImportState, remoteStateId: session.importImapAccountSyncState._id } })
 		}
 	}
@@ -150,7 +148,7 @@ export class ImapImporter implements ImapImportFacade {
 		const session = this.getSessionOrNull(accountSyncStateId)
 		if (session !== null) {
 			await this.imapImportSystemFacade.stopImport(session.importImapAccountSyncState._id)
-			await this.importImapFacade.pauseImapImport(session.importImapAccountSyncState._id)
+			await this.importImapFacade.pauseRunningImapImportFolderSyncStates(session.importImapAccountSyncState._id)
 			session.imapImportState = new ImapImportState(ImportState.PAUSED)
 		}
 		return Promise.resolve(new ImapImportState(ImportState.PAUSED))
@@ -388,7 +386,7 @@ export class ImapImporter implements ImapImportFacade {
 		const session = assertNotNull(this.getSessionOrNull(accountSyncStateId))
 		session.imapImportState = new ImapImportState(ImportState.FINISHED)
 		if (session.importImapAccountSyncState) {
-			await this.importImapFacade.setAllImportImapFolderSyncStatesToFinished(accountSyncStateId)
+			await this.importImapFacade.updateAllImportImapFolderSyncStates(accountSyncStateId, ImportImapFolderSyncStatus.Finished)
 		}
 		return Promise.resolve()
 	}

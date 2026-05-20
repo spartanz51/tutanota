@@ -91,7 +91,7 @@ export class ImapSyncSessionProcess {
 
 			// emit ImapMailboxStatus and update SyncSessionMailbox
 			const imapMailboxStatus = ImapMailboxStatus.fromImapFlowMailboxObject(mailboxObject)
-			adSyncEventListener.onMailboxStatus(imapMailboxStatus)
+			await adSyncEventListener.onMailboxStatus(imapMailboxStatus)
 			this.updateSyncSessionMailbox(imapMailboxStatus)
 
 			const openedImapMailbox = ImapMailbox.fromSyncSessionMailbox(this.adSyncOptimizer.optimizedSyncSessionMailbox)
