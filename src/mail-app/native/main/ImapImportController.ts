@@ -201,14 +201,15 @@ export class ImapImportController {
 		return await this.imapImporter.getImapMailboxesFromServer(imapAccount)
 	}
 
-	getFolderSystemForSelectedMailbox() {
+	async getFolderSystemForSelectedMailbox() {
 		const selectedMailBoxDetail = assertNotNull(this.selectedMailBoxDetail)
+		await this.mailModel.init()
 		return assertNotNull(this.mailModel.getFolderSystemByGroupId(assertNotNull(selectedMailBoxDetail.mailbox._ownerGroup)))
 	}
 
 	async constructImapMailboxesToTutaFoldersMap(imapMailboxes: ReadonlyArray<ImapMailbox>): Promise<Map<string, Id>> {
 		const imapMailboxesToTutaFolders = new Map<string, Id>()
-		const folderSystem = this.getFolderSystemForSelectedMailbox()
+		const folderSystem = await this.getFolderSystemForSelectedMailbox()
 		for (const imapMailbox of imapMailboxes) {
 			if (imapMailbox.specialUse) {
 				const systemFolderType = ImapMailbox.getSpecialUseAsSystemFolderType(imapMailbox)

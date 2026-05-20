@@ -75,7 +75,7 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 	async oninit() {
 		this.controller = await mailLocator.imapImportController()
 		const imapMailboxResult = await this.controller.getImapMailboxesFromServer(assertNotNull(this.imapAccount))
-		this.folderSystem = this.controller.getFolderSystemForSelectedMailbox()
+		this.folderSystem = await this.controller.getFolderSystemForSelectedMailbox()
 		if (imapMailboxResult.result) {
 			this.imapMailboxes.push(...imapMailboxResult.result)
 			this.imapMailboxesToTutaFolders = await this.controller.constructImapMailboxesToTutaFoldersMap(imapMailboxResult.result)
@@ -339,12 +339,14 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 									null,
 									null,
 									mailboxToRow.imapMailbox.name,
-									(folderId) => (newFolderElementId = elementIdPart(folderId)),
+									async (folderId) => {
+										newFolderElementId = elementIdPart(folderId)
+										obj.folderSystem = await assertNotNull(this.controller).getFolderSystemForSelectedMailbox()
+										if (newFolderElementId !== null) {
+											data.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, newFolderElementId)
+										}
+									},
 								)
-								obj.folderSystem = assertNotNull(this.controller).getFolderSystemForSelectedMailbox()
-								if (newFolderElementId !== null) {
-									data.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, newFolderElementId)
-								}
 							}
 						},
 					}),

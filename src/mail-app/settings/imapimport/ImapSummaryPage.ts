@@ -188,12 +188,14 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 									null,
 									null,
 									mailboxToRow.imapMailbox.name,
-									(folderId) => (newFolderElementId = elementIdPart(folderId)),
+									async (folderId) => {
+										newFolderElementId = elementIdPart(folderId)
+										data.folderSystem = await assertNotNull(this.controller).getFolderSystemForSelectedMailbox()
+										if (newFolderElementId !== null) {
+											data.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, newFolderElementId)
+										}
+									},
 								)
-								data.folderSystem = assertNotNull(this.controller).getFolderSystemForSelectedMailbox()
-								if (newFolderElementId !== null) {
-									data.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, newFolderElementId)
-								}
 							}
 						},
 					}),
