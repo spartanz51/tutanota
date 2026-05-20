@@ -19,7 +19,7 @@ import { OauthHandler } from "../../../common/api/common/utils/imapImportUtils/O
 
 assertMainOrNode()
 
-type ActiveImport = {
+export type ActiveImport = {
 	mailGroupId: Id
 	remoteStateId?: IdTuple
 	remoteMailAddress: string
@@ -130,21 +130,8 @@ export class ImapImportController {
 		return imapImportState
 	}
 
-	async loadImapImportStates(): Promise<Map<string, ImapImportState>> {
-		const entries = await promiseMap(Array.from(this.activeImports.values()), async (session) => {
-			const idTuple = session.remoteStateId
-			if (!idTuple) {
-				throw new Error("Cannot load state for session without remoteStateId")
-			}
-
-			const key = this.getMapKey(idTuple)
-			const imapImportState = await this.imapImporter.loadImapImportState(idTuple)
-
-			session.imapImportState = imapImportState
-			return [key, imapImportState] as [string, ImapImportState]
-		})
-
-		return new Map(entries)
+	async loadImapImportStates(): Promise<Map<string, ActiveImport>> {
+		return this.activeImports
 	}
 
 	async updateFolderSyncProgressForActiveImports() {
@@ -227,10 +214,9 @@ export class ImapImportController {
 		return imapMailboxesToTutaFolders
 	}
 
-	async initImapAccountSyncStates(): Promise<Map<string, ImapImportState>> {
+	async initImapAccountSyncStates(): Promise<Map<string, ActiveImport>> {
 		this.mailboxDetails = await this.mailboxModel.getMailboxDetails()
 		this.selectedMailBoxDetail = first(this.mailboxDetails)
-		const imapImportStates = new Map<string, ImapImportState>()
 		for (const mailboxDetail of this.mailboxDetails) {
 			const mailbox = mailboxDetail.mailbox
 
@@ -248,12 +234,11 @@ export class ImapImportController {
 						mailGroupId: assertNotNull(mailbox._ownerGroup),
 						syncProgress: await this.estimateFolderSyncProgressForAccountSyncState(imapAccountSyncState._id),
 					})
-					imapImportStates.set(this.getMapKey(imapAccountSyncState._id), new ImapImportState(ImportState.RUNNING))
 				}
 			}
 		}
 
-		return imapImportStates
+		return this.activeImports
 	}
 
 	private getMapKey(id: IdTuple): string {

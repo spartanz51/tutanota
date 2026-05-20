@@ -9,7 +9,7 @@ import { Icons } from "../../../common/gui/base/icons/Icons"
 import { ButtonSize } from "../../../common/gui/base/ButtonSize"
 import { theme } from "../../../common/gui/theme"
 import { ImapImportState, ImportState } from "../../../common/api/common/utils/imapImportUtils/ImapImportUtils"
-import { ImapImportController } from "../../native/main/ImapImportController"
+import { ActiveImport, ImapImportController } from "../../native/main/ImapImportController"
 import { BannerType, InfoBanner } from "../../../common/gui/base/InfoBanner"
 import { TitleSection } from "../../../common/gui/base/TitleSection"
 import { PrimaryButton } from "../../../common/gui/base/buttons/VariantButtons"
@@ -25,7 +25,7 @@ import { ImapProvider } from "../../../common/api/common/utils/imapImportUtils/I
 assertMainOrNode()
 
 class ImapImportSettingsViewer implements UpdatableSettingsViewer {
-	private imapImportStates: Map<string, ImapImportState> = new Map()
+	private imapImportStates: Map<string, ActiveImport> = new Map()
 	private imapImportController: ImapImportController | null = null
 
 	constructor() {}
@@ -110,7 +110,10 @@ class ImapImportSettingsViewer implements UpdatableSettingsViewer {
 
 	private renderSyncProgress(imapImportController: ImapImportController) {
 		return Array.from(imapImportController.getActiveImports().entries()).map(([accountSyncStateIdString, activeImport]) => {
-			const accountSyncStateId = assertNotNull(activeImport.remoteStateId)
+			const accountSyncStateId = activeImport.remoteStateId
+			if (accountSyncStateId === undefined) {
+				return null
+			}
 			if (!imapImportController.shouldRenderCancelButton(accountSyncStateId)) {
 				return null
 			}
@@ -158,9 +161,10 @@ class ImapImportSettingsViewer implements UpdatableSettingsViewer {
 			}
 
 			let syncMessage = lang.getTranslation("imapSyncInProgressInfo_msg")
-			const imapImportState = this.imapImportStates.get(accountSyncStateIdString)
-			if (imapImportState && imapImportState.state === ImportState.POSTPONED) {
-				syncMessage = lang.getTranslation("imapSyncPostponed_msg", { "{postponedUntil}": imapImportState.postponedUntil.toLocaleTimeString() })
+			if (activeImport.imapImportState.state === ImportState.POSTPONED) {
+				syncMessage = lang.getTranslation("imapSyncPostponed_msg", {
+					"{postponedUntil}": activeImport.imapImportState.postponedUntil.toLocaleTimeString(),
+				})
 			}
 			const mailboxDetail = assertNotNull(this.imapImportController?.getActiveImportMailboxDetail(accountSyncStateId))
 			const destinationTutaMailbox = getMailboxName(mailLocator.logins, mailboxDetail)

@@ -142,9 +142,9 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 			imapMailboxToTutaFolderRows.map((mailboxToRow) => {
 				return m(".flex.gap-8.items-center.mt-8", [
 					m(TextField, {
-						class: "",
+						class: "m-0",
 						value: mailboxToRow.imapMailbox.name ?? "",
-						disabled: true,
+						isReadOnly: true,
 					}),
 					m(Icon, {
 						icon: Icons.SimpleArrowRight,
@@ -222,9 +222,9 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 			imapMailboxToTutaFolderRows.map((mailboxToRow) => {
 				return m(".flex.gap-8.items-center.mt-8", [
 					m(TextField, {
+						class: "surface-background",
 						value: mailboxToRow.imapMailbox.name ?? "",
 						isReadOnly: true,
-						class: "surface-background",
 					}),
 					m(Icon, {
 						icon: Icons.SimpleArrowRight,

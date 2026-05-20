@@ -89,7 +89,7 @@ export class TextField implements ClassComponent<TextFieldAttrs> {
 		const borderRadius = `${px(size.radius_8)} ${px(size.radius_8)} ${borderBottomRadius} ${borderBottomRadius}`
 
 		return m(
-			".full-width",
+			".full-width.text-ellipsis",
 			m(
 				`.login-textfield.rel.overflow-hidden`,
 				{

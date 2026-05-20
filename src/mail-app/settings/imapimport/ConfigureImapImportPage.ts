@@ -139,7 +139,7 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 				m("", lang.getTranslationText("imapAddLabelToImportedMails_label")),
 				m(IconButton, {
 					icon: Icons.QuestionmarkFilled,
-					title: "imapSyncFolderMapping_title",
+					title: "imapAddLabelToImportedMails_label",
 					click: this.updateHoverMessage("imapConfigurationAddLabelInfo_msg"),
 				}),
 			]),
@@ -292,9 +292,9 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 			imapMailboxToTutaFolderRows.map((mailboxToRow) => {
 				return m(".flex.gap-8.items-center.mt-8", [
 					m(TextField, {
-						class: "",
+						class: "m-0",
 						value: mailboxToRow.imapMailbox.name ?? "",
-						disabled: true,
+						isReadOnly: true,
 					}),
 					m(Icon, {
 						icon: Icons.SimpleArrowRight,
