@@ -11,7 +11,7 @@ import { AvailablePlans, AvailablePlanType, NewPersonalPaidPlans, NewPersonalPla
 
 export type DiscountDetail = {
 	ribbonTranslation: Translation
-	discountType: "BonusMonths" | "IndividualFirstYear" | "Permanent" | "GlobalFirstYear"
+	discountType: "BonusMonths" | "BonusMonthsAndGlobalFirstYear" | "IndividualFirstYear" | "Permanent" | "GlobalFirstYear"
 }
 
 export type DiscountDetails = Partial<Record<PlanType, DiscountDetail>>
@@ -130,7 +130,7 @@ export function getHasCampaign(discountDetail: DiscountDetail | undefined, isYea
 
 export function anyHasGlobalFirstYearCampaign(discountDetails?: DiscountDetails): boolean {
 	if (!discountDetails) return false
-	return Object.values(discountDetails).some((v) => v.discountType === "GlobalFirstYear")
+	return Object.values(discountDetails).some((v) => v.discountType === "GlobalFirstYear" || v.discountType === "BonusMonthsAndGlobalFirstYear")
 }
 
 export function getDiscountDetails(isApplePrice: boolean, priceAndConfigProvider: PriceAndConfigProvider): DiscountDetails {
@@ -197,9 +197,19 @@ export function getDiscountDetails(isApplePrice: boolean, priceAndConfigProvider
 		const firstYearDiscountPercentage = Math.floor((firstYearDiscount / yearlyRefPrice) * 100)
 
 		if (bonusMonth > 0 && NewPersonalPaidPlans.includes(targetPlan)) {
-			discountDetails[targetPlan] = {
-				ribbonTranslation: lang.getTranslation("pricing.bonusMonth_label", { "{months}": bonusMonth }),
-				discountType: "BonusMonths",
+			if (hasGlobalCampaign) {
+				discountDetails[targetPlan] = {
+					ribbonTranslation: lang.getTranslation("pricing.bonusMonthAndGlobalFirstYear_label", {
+						"{months}": bonusMonth,
+						"{amount}": `${firstYearDiscountPercentage}%`,
+					}),
+					discountType: "BonusMonthsAndGlobalFirstYear",
+				}
+			} else {
+				discountDetails[targetPlan] = {
+					ribbonTranslation: lang.getTranslation("pricing.bonusMonth_label", { "{months}": bonusMonth }),
+					discountType: "BonusMonths",
+				}
 			}
 		} else if (permanentDiscountPercentage > 0) {
 			discountDetails[targetPlan] = {
