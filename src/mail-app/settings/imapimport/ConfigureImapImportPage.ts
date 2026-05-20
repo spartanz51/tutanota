@@ -1,6 +1,6 @@
 import m, { Children, Vnode, VnodeDOM } from "mithril"
 import { assertMainOrNode, MailSetKind } from "@tutao/app-env"
-import { getElementId, tutanotaTypeRefs } from "@tutao/typerefs"
+import { elementIdPart, getElementId, tutanotaTypeRefs } from "@tutao/typerefs"
 import { assertNotNull } from "@tutao/utils"
 import { emitWizardEvent, WizardEventType, WizardPageAttrs, WizardPageN } from "../../../common/gui/base/WizardDialog"
 import { TextField } from "../../../common/gui/base/TextField"
@@ -289,8 +289,8 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 		const obj = this
 		return m(
 			"",
-			imapMailboxToTutaFolderRows.map((mailboxToRow) =>
-				m(".flex.gap-8.items-center.mt-8", [
+			imapMailboxToTutaFolderRows.map((mailboxToRow) => {
+				return m(".flex.gap-8.items-center.mt-8", [
 					m(TextField, {
 						class: "",
 						value: mailboxToRow.imapMailbox.name ?? "",
@@ -333,20 +333,23 @@ export class ConfigureImapImportPage implements WizardPageN<ImapImportData> {
 						title: "selectMultiple_action",
 						click: async () => {
 							if (this.controller) {
-								await showEditFolderDialog(assertNotNull(this.controller.selectedMailBoxDetail), null, null, mailboxToRow.imapMailbox.name)
-									.then(() => (obj.folderSystem = assertNotNull(this.controller).getFolderSystemForSelectedMailbox()))
-									.then(() => {
-										const newlyAddedFolder = obj.folderSystem.getFolderByName(assertNotNull(mailboxToRow.imapMailbox.name))
-										if (newlyAddedFolder) {
-											this.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, getElementId(newlyAddedFolder))
-										}
-									})
-									.then(() => m.redraw())
+								let newFolderElementId: Id | null = null
+								await showEditFolderDialog(
+									assertNotNull(this.controller.selectedMailBoxDetail),
+									null,
+									null,
+									mailboxToRow.imapMailbox.name,
+									(folderId) => (newFolderElementId = elementIdPart(folderId)),
+								)
+								obj.folderSystem = assertNotNull(this.controller).getFolderSystemForSelectedMailbox()
+								if (newFolderElementId !== null) {
+									data.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, newFolderElementId)
+								}
 							}
 						},
 					}),
-				]),
-			),
+				])
+			}),
 		)
 	}
 

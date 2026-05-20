@@ -1,6 +1,6 @@
 import m, { Children, Vnode, VnodeDOM } from "mithril"
 import { assertMainOrNode, MailSetKind } from "@tutao/app-env"
-import { getElementId, tutanotaTypeRefs } from "@tutao/typerefs"
+import { elementIdPart, getElementId, tutanotaTypeRefs } from "@tutao/typerefs"
 import { assertNotNull, noOp } from "@tutao/utils"
 import { ImportResult, InitializeImapImportParams } from "../../workerUtils/imapimport/ImapImporter.js"
 import { emitWizardEvent, WizardEventType, WizardPageAttrs, WizardPageN } from "../../../common/gui/base/WizardDialog"
@@ -182,21 +182,31 @@ export class ImapSummaryPage implements WizardPageN<ImapImportData> {
 						title: "selectMultiple_action",
 						click: async () => {
 							if (this.controller) {
-								await showEditFolderDialog(assertNotNull(this.controller.selectedMailBoxDetail), null, null, mailboxToRow.imapMailbox.name)
-									.then(() => (data.folderSystem = assertNotNull(this.controller).getFolderSystemForSelectedMailbox()))
-									.then(() => {
-										const newlyAddedFolder = data.folderSystem.getFolderByName(assertNotNull(mailboxToRow.imapMailbox.name))
-										if (newlyAddedFolder) {
-											data.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, getElementId(newlyAddedFolder))
-										}
-									})
-									.then(() => m.redraw())
+								let newFolderElementId: Id | null = null
+								await showEditFolderDialog(
+									assertNotNull(this.controller.selectedMailBoxDetail),
+									null,
+									null,
+									mailboxToRow.imapMailbox.name,
+									(folderId) => (newFolderElementId = elementIdPart(folderId)),
+								)
+								data.folderSystem = assertNotNull(this.controller).getFolderSystemForSelectedMailbox()
+								if (newFolderElementId !== null) {
+									data.imapMailboxesToTutaFolders?.set(mailboxToRow.imapMailbox.path, newFolderElementId)
+								}
 							}
 						},
 					}),
 				])
 			}),
 		)
+	}
+
+	getFolderItems(data: ImapImportData) {
+		return data.folderSystem.getIndentedList(null).map((indentedFolder) => ({
+			name: getFolderName(indentedFolder.folder),
+			value: indentedFolder.folder,
+		}))
 	}
 
 	private renderFolderMappingReadonlyMode(

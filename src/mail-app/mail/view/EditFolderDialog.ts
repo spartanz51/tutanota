@@ -10,7 +10,7 @@ import { MailboxDetail } from "../../../common/mailFunctionality/MailboxModel.js
 import { MailReportType, MailSetKind } from "@tutao/app-env"
 import { reportMailsAutomatically } from "./MailReportDialog.js"
 import { isOfflineError } from "../../../common/api/common/utils/ErrorUtils.js"
-import { groupByAndMap } from "@tutao/utils"
+import { groupByAndMap, noOp } from "@tutao/utils"
 import { mailLocator } from "../../mailLocator.js"
 import type { FolderSystem, IndentedFolder } from "../../../common/api/common/mail/FolderSystem.js"
 import { getFolderName, getIndentedFolderNameForDropdown, getPathToFolderString } from "../model/MailUtils.js"
@@ -26,6 +26,7 @@ export async function showEditFolderDialog(
 	editedFolder: MailSet | null = null,
 	parentFolder: MailSet | null = null,
 	prefilledFolderName: string | null = null,
+	onFolderCreated: (folderId: IdTuple) => void = noOp,
 ) {
 	const noParentFolderOption = lang.get("comboBoxSelectionNone_msg")
 	const mailGroupId = mailBoxDetail.mailGroup._id
@@ -85,7 +86,8 @@ export async function showEditFolderDialog(
 		try {
 			// if folder is null, create new folder
 			if (editedFolder === null) {
-				await locator.mailFacade.createMailFolder(folderNameValue, selectedParentFolder?._id ?? null, mailGroupId)
+				const createdFolderId = await locator.mailFacade.createMailFolder(folderNameValue, selectedParentFolder?._id ?? null, mailGroupId)
+				onFolderCreated?.(createdFolderId)
 			} else {
 				// if it is being moved to trash (and not already in trash), ask about trashing
 				if (selectedParentFolder?.folderType === MailSetKind.TRASH && !isSameId(selectedParentFolder._id, editedFolder.parentFolder)) {
