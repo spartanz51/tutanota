@@ -4,9 +4,9 @@ import { assertMainOrNode, ProgrammingError } from "@tutao/app-env"
 import { emitWizardEvent, WizardEventType, WizardPageAttrs, WizardPageN } from "../../../common/gui/base/WizardDialog"
 import { lang, TranslationKey } from "../../../common/misc/LanguageViewModel"
 import { ToggleButton } from "../../../common/gui/base/buttons/ToggleButton"
-import { Icons } from "../../../common/gui/base/icons/Icons"
+import { GmailLogo, Icons, OutlookLogo } from "../../../common/gui/base/icons/Icons"
 import { ButtonSize } from "../../../common/gui/base/ButtonSize"
-import { TitleSection } from "../../../common/gui/base/TitleSection"
+import { TitleSectionAttrs, TitleSection } from "../../../common/gui/base/TitleSection"
 import { px, size } from "../../../common/gui/size"
 import { theme } from "../../../common/gui/theme"
 import { TextField } from "../../../common/gui/base/TextField"
@@ -14,20 +14,34 @@ import { PrimaryButton } from "../../../common/gui/base/buttons/VariantButtons"
 import { LegacyTextFieldType } from "../../../common/gui/base/LegacyTextField"
 import { OauthHandler } from "../../../common/api/common/utils/imapImportUtils/OauthHandler"
 import { mailLocator } from "../../mailLocator"
+import { ImapProvider } from "../../../common/api/common/utils/imapImportUtils/ImapKnownConfigs"
 
 assertMainOrNode()
 
 export class EnterImapCredentialsPage implements WizardPageN<ImapImportData> {
 	private dom: HTMLElement | null = null
 	private shouldDisplayServerConfigFields: boolean = false
-	private titleSectionParams = {
-		icon: Icons.QuestionmarkFilled,
+	private titleSectionParams: Partial<TitleSectionAttrs> = {
+		icon: Icons.MailFilled,
 		iconOptions: { color: theme.on_surface_variant },
 		subTitle: lang.getTranslationText("imapSyncCredentialsInfo_msg"),
 	}
 	oncreate(vnode: VnodeDOM<WizardPageAttrs<ImapImportData>>) {
 		this.dom = vnode.dom as HTMLElement
 		// fixme modify this check when removing default values
+		const provider = vnode.attrs.data.imapProvider
+		switch (provider) {
+			case ImapProvider.Google:
+				this.titleSectionParams.icon = undefined
+				this.titleSectionParams.iconOptions = undefined
+				this.titleSectionParams.customIcon = m.trust(GmailLogo)
+				break
+			case ImapProvider.Microsoft:
+				this.titleSectionParams.icon = undefined
+				this.titleSectionParams.iconOptions = undefined
+				this.titleSectionParams.customIcon = m.trust(OutlookLogo)
+				break
+		}
 		this.shouldDisplayServerConfigFields = !vnode.attrs.data.isImapServerSupportingOAuth
 	}
 
@@ -40,7 +54,7 @@ export class EnterImapCredentialsPage implements WizardPageN<ImapImportData> {
 					marginTop: px(size.spacing_16),
 					borderRadius: px(size.radius_16),
 				},
-			}),
+			} as TitleSectionAttrs),
 			m(".mt-16"),
 			m(TextField, {
 				label: "imapAccountUsername_label",

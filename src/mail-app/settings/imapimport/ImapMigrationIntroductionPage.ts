@@ -3,8 +3,8 @@ import { ImapImportData } from "./AddImapImportWizard.js"
 import { assertMainOrNode } from "@tutao/app-env"
 import { emitWizardEvent, WizardEventType, WizardPageAttrs, WizardPageN } from "../../../common/gui/base/WizardDialog"
 import { lang, TranslationKey } from "../../../common/misc/LanguageViewModel"
-import { Icons } from "../../../common/gui/base/icons/Icons"
-import { TitleSection } from "../../../common/gui/base/TitleSection"
+import { GmailLogo, Icons, OutlookLogo } from "../../../common/gui/base/icons/Icons"
+import { TitleSection, TitleSectionAttrs } from "../../../common/gui/base/TitleSection"
 import { px, size } from "../../../common/gui/size"
 import { ImapImportController } from "../../native/main/ImapImportController"
 import { getMailboxName } from "../../../common/mailFunctionality/SharedMailUtils"
@@ -32,10 +32,28 @@ export class ImapMigrationIntroductionPage implements WizardPageN<ImapImportData
 	}
 
 	view(vnode: Vnode<WizardPageAttrs<ImapImportData>>): Children {
+		const imapProvider = vnode.attrs.data.imapProvider
+		let titleSectionParams: Partial<TitleSectionAttrs>
+		switch (imapProvider) {
+			case ImapProvider.Google:
+				titleSectionParams = {
+					customIcon: m.trust(GmailLogo),
+				}
+				break
+			case ImapProvider.Microsoft:
+				titleSectionParams = {
+					customIcon: m.trust(OutlookLogo),
+				}
+				break
+			default:
+				titleSectionParams = {
+					icon: Icons.MailFilled,
+					iconOptions: { color: theme.on_surface_variant },
+				}
+		}
 		return m(".mt-24", [
 			m(TitleSection, {
-				icon: Icons.QuestionmarkFilled,
-				iconOptions: { color: theme.on_surface_variant },
+				...titleSectionParams,
 				title: "",
 				subTitle: lang.getTranslationText("imapSyncIntroductionInfo_msg"),
 				style: {

@@ -2,16 +2,17 @@ import { AllIcons, Icon, IconSize } from "./Icon"
 import m, { Children, Component, Vnode } from "mithril"
 import { Card } from "./Card"
 
-export type SettingsTitleSectionAttrsType = {
+export type TitleSectionAttrs = {
 	icon?: AllIcons
 	iconOptions?: { color: string; class?: string }
+	customIcon?: Children
 	title: string
 	subTitle: Children
 	style?: Record<string, any>
 }
 
-export class TitleSection implements Component<SettingsTitleSectionAttrsType> {
-	view({ attrs }: Vnode<SettingsTitleSectionAttrsType>): Children {
+export class TitleSection implements Component<TitleSectionAttrs> {
+	view({ attrs }: Vnode<TitleSectionAttrs>): Children {
 		return m(
 			Card,
 			{},
@@ -35,7 +36,9 @@ export class TitleSection implements Component<SettingsTitleSectionAttrsType> {
 									fill: attrs.iconOptions?.color,
 								},
 							})
-						: null,
+						: attrs.customIcon
+							? attrs.customIcon
+							: null,
 				),
 				m(
 					".center.mb-16",
