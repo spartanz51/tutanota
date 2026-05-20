@@ -134,6 +134,9 @@ export class ImapProviderSelectionPageAttrs implements WizardPageAttrs<ImapImpor
 	hideAllPagingButtons = true
 	hidePagingButtonForPage = true
 
+	//Todo: This should not be necessary if this is hiding paginations.
+	stepTitle = "imapSyncFolderMapping_title" as TranslationKey
+
 	constructor(imapImportData: ImapImportData) {
 		this.data = imapImportData
 	}
