@@ -66,9 +66,9 @@ export class ImapProviderSelectionPage implements WizardPageN<ImapImportData> {
 								}
 								vnode.attrs.data.imapAccountHost = imapConfig.host
 								vnode.attrs.data.imapAccountPort = Number.parseInt(imapConfig.port)
-								vnode.attrs.data.imapProvider = this.selectedProvider
 							}
 
+							vnode.attrs.data.imapProvider = this.selectedProvider
 							emitWizardEvent(dom, WizardEventType.SHOW_NEXT_PAGE)
 						},
 						disabled: this.selectedProvider === null,
