@@ -1,5 +1,5 @@
 import { AesKeyLength, getAndVerifyAesKeyLength, getKeyLengthInBytes } from "./AesKeyLength.js"
-import { SymmetricAeadCipherVersionMaybeWithGroupKeyVersion, SymmetricAesCipherVersion, SymmetricCipherVersion } from "./SymmetricCipherVersion.js"
+import { SymmetricAeadCipherVersionMaybeWithGroupKeyVersion, SymmetricAesCbcCipherVersion, SymmetricCipherVersion } from "./SymmetricCipherVersion.js"
 import { Aes256Key, AesKey, KdfNonce, keyToUint8Array, uint8ArrayToKey } from "./SymmetricCipherUtils.js"
 import { sha256Hash } from "../../hashes/Sha256.js"
 import { sha512Hash } from "../../hashes/Sha512.js"
@@ -21,7 +21,7 @@ export type AesCbcThenHmacSubKeys = {
 	authenticationKey: AesKey
 }
 
-export type AesSubKeys = UnusedReservedUnauthenticatedSubKeys | AesCbcThenHmacSubKeys
+export type AesCbcSubKeys = UnusedReservedUnauthenticatedSubKeys | AesCbcThenHmacSubKeys
 
 export type AeadWithGroupKeySubKeys = {
 	cipherVersion: typeof SymmetricCipherVersion.AeadWithGroupKey
@@ -38,7 +38,7 @@ export type AeadWithSessionKeySubKeys = {
 
 export type AeadSubKeys = AeadWithGroupKeySubKeys | AeadWithSessionKeySubKeys
 
-export type SymmetricSubKeys = AesSubKeys | AeadSubKeys
+export type SymmetricSubKeys = AesCbcSubKeys | AeadSubKeys
 
 const DEFAULT_LENGTH_PER_KEY_BYTES = getKeyLengthInBytes(AesKeyLength.Aes256)
 const DEFAULT_TOTAL_KEY_LENGTH_BYTES = 2 * DEFAULT_LENGTH_PER_KEY_BYTES
@@ -59,7 +59,7 @@ export class SymmetricKeyDeriver {
 	/**
 	 * Derives encryption and authentication keys as needed for the symmetric cipher implementations
 	 */
-	deriveSubKeys(key: AesKey, symmetricCipherVersion: SymmetricAesCipherVersion): AesSubKeys {
+	deriveSubKeys(key: AesKey, symmetricCipherVersion: SymmetricAesCbcCipherVersion): AesCbcSubKeys {
 		const keyLength = getAndVerifyAesKeyLength(key)
 		switch (symmetricCipherVersion) {
 			case SymmetricCipherVersion.UnusedReservedUnauthenticated:

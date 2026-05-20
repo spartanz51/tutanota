@@ -1,10 +1,10 @@
 import { AesKey, generateInitializationVector, InitializationVector, KdfNonce, keyToUint8Array, uint8ArrayToKey } from "./SymmetricCipherUtils.js"
 import { AES_CBC_FACADE, AesCbcFacade, AuthenticationEnforcement, PaddingStandard } from "./AesCbcFacade.js"
-import { SymmetricAesCipherVersion, SymmetricCipherVersion } from "./SymmetricCipherVersion.js"
+import { SymmetricAesCbcCipherVersion, SymmetricCipherVersion } from "./SymmetricCipherVersion.js"
 import { Nullable } from "@tutao/utils"
 import { AesKeyLength, getAndVerifyAesKeyLength } from "./AesKeyLength"
 import { AEAD_FACADE, AeadFacade } from "./AeadFacade.js"
-import { AeadSubKeys, AesSubKeys, InstanceTypeId, SYMMETRIC_KEY_DERIVER, SymmetricKeyDeriver } from "./SymmetricKeyDeriver.js"
+import { AeadSubKeys, AesCbcSubKeys, InstanceTypeId, SYMMETRIC_KEY_DERIVER, SymmetricKeyDeriver } from "./SymmetricKeyDeriver.js"
 import { ClientTypeModel } from "@tutao/typerefs"
 import { SubKeyInfo, SubKeyProvider } from "./encryption/SubKeyProvider"
 import { InstanceDecryptor } from "./decryption/InstanceDecryptor"
@@ -56,7 +56,7 @@ export class SymmetricCipherFacade {
 	 * @param bytes The data to encrypt.
 	 * @return The encrypted bytes.
 	 */
-	encryptBytes(key: AesKey | AesSubKeys, bytes: Uint8Array): Uint8Array {
+	encryptBytes(key: AesKey | AesCbcSubKeys, bytes: Uint8Array): Uint8Array {
 		return this.encrypt(key, bytes, PaddingStandard.Pkcs5, SymmetricCipherVersion.AesCbcThenHmac)
 	}
 
@@ -96,7 +96,7 @@ export class SymmetricCipherFacade {
 	 * @deprecated use encryptBytes instead
 	 */
 	encryptBytesDeprecatedCustomIv(key: AesKey, bytes: Uint8Array, initializationVector: InitializationVector): Uint8Array {
-		const cipherVersion: SymmetricAesCipherVersion = SymmetricCipherVersion.AesCbcThenHmac
+		const cipherVersion: SymmetricAesCbcCipherVersion = SymmetricCipherVersion.AesCbcThenHmac
 		const subKeys = this.symmetricKeyDeriver.deriveSubKeys(key, cipherVersion)
 		return this.aesCbcFacade.encrypt(subKeys, bytes, initializationVector, PaddingStandard.Pkcs5, cipherVersion)
 	}
@@ -109,7 +109,7 @@ export class SymmetricCipherFacade {
 	 * @deprecated use encryptBytes instead.
 	 */
 	encryptBytesDeprecatedUnauthenticatedCustomIv(key: AesKey, bytes: Uint8Array, initializationVector: InitializationVector): Uint8Array {
-		const cipherVersion: SymmetricAesCipherVersion = SymmetricCipherVersion.UnusedReservedUnauthenticated
+		const cipherVersion: SymmetricAesCbcCipherVersion = SymmetricCipherVersion.UnusedReservedUnauthenticated
 		const subKeys = this.symmetricKeyDeriver.deriveSubKeys(key, cipherVersion)
 		return this.aesCbcFacade.encrypt(subKeys, bytes, initializationVector, PaddingStandard.Pkcs5, cipherVersion, AuthenticationEnforcement.Relaxed)
 	}
@@ -215,16 +215,16 @@ export class SymmetricCipherFacade {
 	}
 
 	private encrypt(
-		key: AesKey | AesSubKeys,
+		key: AesKey | AesCbcSubKeys,
 		plaintext: Uint8Array,
 		paddingStandard: PaddingStandard,
-		cipherVersion: SymmetricAesCipherVersion,
+		cipherVersion: SymmetricAesCbcCipherVersion,
 		initializationVectorVariant: InitializationVectorVariant = InitializationVectorVariant.Random,
 		authenticationEnforcement: AuthenticationEnforcement = AuthenticationEnforcement.Strict,
 	): Uint8Array {
 		const initializationVector: InitializationVectorSource =
 			initializationVectorVariant === InitializationVectorVariant.Random ? generateInitializationVector() : initializationVectorVariant
-		let subKeys: AesSubKeys
+		let subKeys: AesCbcSubKeys
 		if (Array.isArray(key)) {
 			subKeys = this.symmetricKeyDeriver.deriveSubKeys(key, cipherVersion)
 		} else {

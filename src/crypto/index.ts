@@ -175,14 +175,14 @@ export {
 	type AeadSubKeys,
 	type AeadWithGroupKeySubKeys,
 	type AeadWithSessionKeySubKeys,
-	type AesSubKeys,
+	type AesCbcSubKeys,
 	type AesCbcThenHmacSubKeys,
 	type UnusedReservedUnauthenticatedSubKeys,
 	type InstanceTypeId,
 } from "./encryption/symmetric/SymmetricKeyDeriver.js"
 export {
 	SymmetricCipherVersion,
-	type SymmetricAesCipherVersion,
+	type SymmetricAesCbcCipherVersion,
 	type SymmetricAeadCipherVersion,
 	getSymmetricCipherVersion,
 	type SymmetricCipherVersionAeadWithGroupKey,

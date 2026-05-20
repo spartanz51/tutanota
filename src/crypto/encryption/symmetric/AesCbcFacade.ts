@@ -1,9 +1,9 @@
 import { SymmetricCipherVersion, symmetricCipherVersionToUint8Array } from "./SymmetricCipherVersion.js"
-import { bitArrayToUint8Array, FIXED_INITIALIZATION_VECTOR, uint8ArrayToBitArray } from "./SymmetricCipherUtils"
+import { AesKey, bitArrayToUint8Array, FIXED_INITIALIZATION_VECTOR, uint8ArrayToBitArray } from "./SymmetricCipherUtils"
 import { CryptoError } from "@tutao/crypto/error"
 import { assertNotNull, concat } from "@tutao/utils"
 import sjcl from "../../internal/sjcl"
-import { hmacSha256, verifyHmacSha256, verifyHmacSha256Async } from "../Hmac"
+import { hmacSha256, MacTag, verifyHmacSha256, verifyHmacSha256Async } from "../Hmac"
 import { SymmetricSubKeys } from "./SymmetricKeyDeriver"
 import { AesKeyLength, getAndVerifyAesKeyLength } from "./AesKeyLength"
 import { ProgrammingError } from "@tutao/app-env"
@@ -79,18 +79,7 @@ export class AesCbcFacade {
 		paddingStandard: PaddingStandard,
 		authenticationEnforcement: AuthenticationEnforcement = AuthenticationEnforcement.Strict,
 	): Uint8Array {
-		this.tryToEnforceAuthentication(subKeys, parsedCiphertext.cipherVersion, authenticationEnforcement)
-		if (parsedCiphertext.cipherVersion === SymmetricCipherVersion.AesCbcThenHmac && subKeys.cipherVersion === SymmetricCipherVersion.AesCbcThenHmac) {
-			let verifiableCiphertext
-			if (parsedCiphertext.initializationVectorVariant === InitializationVectorVariant.Random) {
-				verifiableCiphertext = concat(parsedCiphertext.initializationVector, parsedCiphertext.ciphertext)
-			} else {
-				verifiableCiphertext = parsedCiphertext.ciphertext
-			}
-			verifyHmacSha256(subKeys.authenticationKey, verifiableCiphertext, parsedCiphertext.macTag)
-		} else if (parsedCiphertext.cipherVersion !== subKeys.cipherVersion) {
-			throw new ProgrammingError("mismatched sub-key and ciphertext cipher versions")
-		}
+		this.authenticate(subKeys, parsedCiphertext, authenticationEnforcement, verifyHmacSha256)
 		const usePadding = paddingStandard === PaddingStandard.Pkcs5
 		try {
 			return bitArrayToUint8Array(
@@ -112,27 +101,38 @@ export class AesCbcFacade {
 		parsedCiphertext: ParsedCiphertextAesCbc,
 		authenticationEnforcement: AuthenticationEnforcement = AuthenticationEnforcement.Strict,
 	): Promise<Uint8Array> {
-		const subtle = crypto.subtle
-
-		this.tryToEnforceAuthentication(subKeys, parsedCiphertext.cipherVersion, authenticationEnforcement)
-		if (parsedCiphertext.cipherVersion === SymmetricCipherVersion.AesCbcThenHmac && subKeys.cipherVersion === SymmetricCipherVersion.AesCbcThenHmac) {
-			let verifiableCiphertext
-			if (parsedCiphertext.initializationVectorVariant === InitializationVectorVariant.Random) {
-				verifiableCiphertext = concat(parsedCiphertext.initializationVector, parsedCiphertext.ciphertext)
-			} else {
-				verifiableCiphertext = parsedCiphertext.ciphertext
-			}
-			await verifyHmacSha256Async(subKeys.authenticationKey, verifiableCiphertext, parsedCiphertext.macTag)
-		} else if (parsedCiphertext.cipherVersion !== subKeys.cipherVersion) {
-			throw new ProgrammingError("mismatched sub-key and ciphertext cipher versions")
-		}
+		await this.authenticate(subKeys, parsedCiphertext, authenticationEnforcement, verifyHmacSha256Async)
 		try {
-			const encryptionKey = await subtle.importKey("raw", bitArrayToUint8Array(subKeys.encryptionKey), "AES-CBC", false, ["decrypt"])
+			const encryptionKey = await crypto.subtle.importKey("raw", bitArrayToUint8Array(subKeys.encryptionKey), "AES-CBC", false, ["decrypt"])
 			return new Uint8Array(
-				await subtle.decrypt({ name: "AES-CBC", iv: parsedCiphertext.initializationVector }, encryptionKey, parsedCiphertext.ciphertext),
+				await crypto.subtle.decrypt({ name: "AES-CBC", iv: parsedCiphertext.initializationVector }, encryptionKey, parsedCiphertext.ciphertext),
 			)
 		} catch (e) {
 			throw new CryptoError("aes decryption failed", e as Error)
+		}
+	}
+
+	private authenticate<T>(
+		subKeys: SymmetricSubKeys,
+		parsedCiphertext: ParsedCiphertextAesCbc,
+		authenticationEnforcement: AuthenticationEnforcement,
+		verifyHmac: (key: AesKey, data: Uint8Array, tag: MacTag) => T,
+	): T | undefined {
+		this.tryToEnforceAuthentication(subKeys, parsedCiphertext.cipherVersion, authenticationEnforcement)
+		if (parsedCiphertext.cipherVersion === SymmetricCipherVersion.AesCbcThenHmac && subKeys.cipherVersion === SymmetricCipherVersion.AesCbcThenHmac) {
+			const verifiableCiphertext = this.assembleVerifiableCiphertext(parsedCiphertext)
+			return verifyHmac(subKeys.authenticationKey, verifiableCiphertext, parsedCiphertext.macTag)
+		} else if (parsedCiphertext.cipherVersion !== subKeys.cipherVersion) {
+			throw new ProgrammingError("mismatched sub-key and ciphertext cipher versions")
+		}
+		return undefined
+	}
+
+	private assembleVerifiableCiphertext(parsedCiphertext: ParsedCiphertextAesCbc): Uint8Array {
+		if (parsedCiphertext.initializationVectorVariant === InitializationVectorVariant.Random) {
+			return concat(parsedCiphertext.initializationVector, parsedCiphertext.ciphertext)
+		} else {
+			return parsedCiphertext.ciphertext
 		}
 	}
 

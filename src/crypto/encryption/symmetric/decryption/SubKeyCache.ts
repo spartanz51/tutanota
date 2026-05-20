@@ -1,4 +1,4 @@
-import { AeadSubKeys, AesKey, SymmetricAeadCipherVersion, SymmetricAesCipherVersion, SymmetricSubKeys } from "@tutao/crypto"
+import { AeadSubKeys, AesKey, SymmetricAeadCipherVersion, SymmetricAesCbcCipherVersion, SymmetricSubKeys } from "@tutao/crypto"
 
 export interface SubKeyCache<K, V> {
 	set: (instanceSubKeyCacheKey: K, cachedSubKeys: V) => void
@@ -23,7 +23,7 @@ export function subKeyCache<K, S extends string | number | boolean, V>(serialize
 }
 
 interface InstanceAesSubKeyCacheKey {
-	cipherVersion: SymmetricAesCipherVersion
+	cipherVersion: SymmetricAesCbcCipherVersion
 	aesKey: AesKey
 }
 

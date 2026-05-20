@@ -19,7 +19,6 @@ import {
 import {
 	Base64,
 	base64ToUint8Array,
-	concat,
 	KeyVersion,
 	lazy,
 	Nullable,
@@ -32,7 +31,6 @@ import { CryptoError, SessionKeyNotFoundError } from "@tutao/crypto/error"
 import {
 	AEAD_ATTRIBUTE_ON_UNAUTHENTICATED_INSTANCE_GROUP_KEY_DOMAIN,
 	AEAD_ATTRIBUTE_ON_UNAUTHENTICATED_INSTANCE_SESSION_KEY_DOMAIN,
-	AeadSubKeys,
 	AesKey,
 	DomainSeparator,
 	InstanceDecryptor,
@@ -93,7 +91,7 @@ export class CryptoMapper {
 		return this.decryptParsedInstanceInternal(serverTypeModel, encryptedInstance, instanceDecryptor, ownerGroupId, fieldPathPrefix)
 	}
 
-	async decryptParsedInstanceInternal(
+	private async decryptParsedInstanceInternal(
 		serverTypeModel: ServerTypeModel | ClientTypeModel,
 		encryptedInstance: ServerModelEncryptedParsedInstance,
 		instanceDecryptor: InstanceDecryptor,
@@ -302,14 +300,7 @@ export class CryptoMapper {
 		}
 	}
 
-	encryptValue(
-		valueType: ModelValue & {
-			encrypted: true
-		},
-		value: Nullable<ParsedValue>,
-		subKeyProvider: SubKeyProvider,
-		fieldPath: string,
-	): Nullable<Base64> {
+	encryptValue(valueType: EncryptedModelValue, value: Nullable<ParsedValue>, subKeyProvider: SubKeyProvider, fieldPath: string): Nullable<Base64> {
 		if (value == null) {
 			return null
 		}
@@ -328,22 +319,7 @@ export class CryptoMapper {
 			}
 			const associatedData = stringToUtf8Uint8Array(domainSpecifier + fieldPath)
 			encryptedBytes = this.symmetricCipherFacade.encryptBytesWithAead(subKeys, bytes, associatedData)
-			encryptedBytes = concat(this.taggedCiphertextToVersionedCiphertext(subKeys), encryptedBytes)
 		}
 		return uint8ArrayToBase64(encryptedBytes)
-	}
-
-	private taggedCiphertextToVersionedCiphertext(subKeys: AeadSubKeys): Uint8Array {
-		switch (subKeys.cipherVersion) {
-			case SymmetricCipherVersion.AeadWithSessionKey:
-				return Uint8Array.of(subKeys.cipherVersion)
-			case SymmetricCipherVersion.AeadWithGroupKey: {
-				const keyVersionLengthByte = 0
-				if (subKeys.groupKeyVersion == null) {
-					throw new ProgrammingError("AEAD encryption with group key requires a group key version")
-				}
-				return Uint8Array.of(subKeys.cipherVersion, keyVersionLengthByte, subKeys.groupKeyVersion)
-			}
-		}
 	}
 }

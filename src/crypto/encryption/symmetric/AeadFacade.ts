@@ -6,6 +6,8 @@ import sjcl from "../../internal/sjcl.js"
 import { blake3Mac, blake3MacVerify } from "../../hashes/Blake3.js"
 import { CryptoError } from "../../error.js"
 import { ParsedCiphertextAead } from "./decryption/ParsedCiphertext"
+import { SymmetricCipherVersion } from "./SymmetricCipherVersion"
+import { ProgrammingError } from "@tutao/app-env"
 
 export const PADDING_BLOCK_SIZE: number = 4
 export const PADDING_BYTE: number = 0x80
@@ -75,7 +77,21 @@ export class AeadFacade {
 		const authenticationKey = bitArrayToUint8Array(subKeys.authenticationKey)
 		const tag = blake3Mac(authenticationKey, concat(initializationVectorAndCiphertextLength, initializationVectorAndCiphertext, associatedData))
 
-		return concat(initializationVectorAndCiphertext, tag)
+		return concat(this.ciphertextVersionPrefix(subKeys), initializationVectorAndCiphertext, tag)
+	}
+
+	private ciphertextVersionPrefix(subKeys: AeadSubKeys): Uint8Array {
+		switch (subKeys.cipherVersion) {
+			case SymmetricCipherVersion.AeadWithGroupKey: {
+				const keyVersionLengthByte = 0
+				if (subKeys.groupKeyVersion == null) {
+					throw new ProgrammingError("AEAD encryption with group key requires a group key version")
+				}
+				return Uint8Array.of(subKeys.cipherVersion, keyVersionLengthByte, subKeys.groupKeyVersion)
+			}
+			case SymmetricCipherVersion.AeadWithSessionKey:
+				return Uint8Array.of(subKeys.cipherVersion)
+		}
 	}
 
 	/**
