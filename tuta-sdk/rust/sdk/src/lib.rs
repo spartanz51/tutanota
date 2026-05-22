@@ -26,7 +26,11 @@ use crate::crypto_entity_client::CryptoEntityClient;
 use crate::date::date_provider::SystemDateProvider;
 use crate::element_value::{ElementValue, ParsedEntity};
 use crate::entities::entity_facade::{EntityFacade, EntityFacadeImpl};
-use crate::entities::generated::sys::{CreateSessionData, SaltData, User};
+use crate::entities::generated::sys::{
+	CreateSessionData, CreateSessionReturn, SaltData, SecondFactorAuthData,
+	SecondFactorAuthGetData, User,
+};
+use crate::services::generated::sys::SecondFactorAuthService;
 use crate::entities::generated::tutanota::Mail;
 #[cfg_attr(test, mockall_double::double)]
 use crate::entity_client::EntityClient;
@@ -335,66 +339,9 @@ impl Sdk {
 		mail_address: &str,
 		passphrase: &str,
 	) -> Result<Arc<LoggedInSdk>, LoginError> {
-		let headers_provider = Arc::new(HeadersProvider::new(None));
-		let entity_facade = Arc::new(EntityFacadeImpl::new(
-			self.type_model_provider.clone(),
-			RandomizerFacade::from_core(rand_core::OsRng),
-		));
-
-		let service_executor = ServiceExecutor::new(
-			headers_provider.clone(),
-			None,
-			entity_facade,
-			self.instance_mapper.clone(),
-			self.json_serializer.clone(),
-			self.rest_client.clone(),
-			self.type_model_provider.clone(),
-			self.base_url.to_string(),
-		);
-		let salt_get_input: SaltData = SaltData {
-			_format: 0,
-			mailAddress: mail_address.to_string(),
-		};
-		let salt_return = service_executor
-			.get::<SaltService>(salt_get_input, ExtraServiceParams::default())
-			.await?;
-
-		let Ok(salt) = salt_return.salt.try_into() else {
-			return Err(LoginError::InvalidKey {
-				error_message: "salt has wrong length".to_string(),
-			});
-		};
-
-		let randomizer = RandomizerFacade::from_core(rand_core::OsRng);
-		let access_key = Aes256Key::generate(&randomizer);
-		let user_passphrase_key = derive_user_passphrase_key(KdfType::Argon2id, passphrase, salt);
-		let auth_verifier = create_auth_verifier(user_passphrase_key.clone());
-		let session_data: CreateSessionData = CreateSessionData {
-			_format: 0,
-			accessKey: Some(access_key.as_bytes().to_vec()),
-			authToken: None,
-			authVerifier: Some(auth_verifier),
-			clientIdentifier: "Linux Desktop".to_string(),
-			mailAddress: Some(mail_address.to_string()),
-			recoverCodeVerifier: None,
-			user: None,
-		};
-		let encrypted_passphrase_key = GenericAesKey::Aes256(access_key).encrypt_key(
-			&GenericAesKey::Aes256(user_passphrase_key),
-			Iv::generate(&randomizer),
-		);
-		let session_data_response = service_executor
-			.post::<SessionService>(session_data, ExtraServiceParams::default())
-			.await?;
-
-		self.login(Credentials {
-			login: mail_address.to_string(),
-			user_id: session_data_response.user.clone(),
-			access_token: session_data_response.accessToken.clone(),
-			encrypted_passphrase_key,
-			credential_type: CredentialType::Internal,
-		})
-		.await
+		let (_, credentials) =
+			self.initiate_session(mail_address, passphrase).await?;
+		self.login(credentials).await
 	}
 
 	#[must_use]
@@ -421,6 +368,156 @@ impl Sdk {
 }
 
 impl Sdk {
+	fn make_unauthenticated_service_executor(&self) -> ServiceExecutor {
+		let headers_provider = Arc::new(HeadersProvider::new(None));
+		let entity_facade = Arc::new(EntityFacadeImpl::new(
+			self.type_model_provider.clone(),
+			RandomizerFacade::from_core(rand_core::OsRng),
+		));
+		ServiceExecutor::new(
+			headers_provider,
+			None,
+			entity_facade,
+			self.instance_mapper.clone(),
+			self.json_serializer.clone(),
+			self.rest_client.clone(),
+			self.type_model_provider.clone(),
+			self.base_url.to_string(),
+		)
+	}
+
+	/// Creates a session and returns the raw session response + credentials
+	/// without logging in. This is needed when 2FA is required: the caller
+	/// must check `CreateSessionReturn.challenges`, submit the second factor
+	/// via `submit_2fa`, then call `login(credentials)`.
+	pub async fn initiate_session(
+		&self,
+		mail_address: &str,
+		passphrase: &str,
+	) -> Result<(CreateSessionReturn, Credentials), LoginError> {
+		let service_executor = self.make_unauthenticated_service_executor();
+		let salt_return = service_executor
+			.get::<SaltService>(
+				SaltData {
+					_format: 0,
+					mailAddress: mail_address.to_string(),
+				},
+				ExtraServiceParams::default(),
+			)
+			.await?;
+
+		let Ok(salt) = salt_return.salt.try_into() else {
+			return Err(LoginError::InvalidKey {
+				error_message: "salt has wrong length".to_string(),
+			});
+		};
+
+		let randomizer = RandomizerFacade::from_core(rand_core::OsRng);
+		let access_key = Aes256Key::generate(&randomizer);
+		let user_passphrase_key = derive_user_passphrase_key(KdfType::Argon2id, passphrase, salt);
+		let auth_verifier = create_auth_verifier(user_passphrase_key.clone());
+		let session_data = CreateSessionData {
+			_format: 0,
+			accessKey: Some(access_key.as_bytes().to_vec()),
+			authToken: None,
+			authVerifier: Some(auth_verifier),
+			clientIdentifier: "Rust SDK".to_string(),
+			mailAddress: Some(mail_address.to_string()),
+			recoverCodeVerifier: None,
+			user: None,
+		};
+		let encrypted_passphrase_key = GenericAesKey::Aes256(access_key).encrypt_key(
+			&GenericAesKey::Aes256(user_passphrase_key),
+			Iv::generate(&randomizer),
+		);
+		let session_return = service_executor
+			.post::<SessionService>(session_data, ExtraServiceParams::default())
+			.await?;
+
+		let credentials = Credentials {
+			login: mail_address.to_string(),
+			user_id: session_return.user.clone(),
+			access_token: session_return.accessToken.clone(),
+			encrypted_passphrase_key,
+			credential_type: CredentialType::Internal,
+		};
+
+		Ok((session_return, credentials))
+	}
+
+	/// Submit a TOTP code for second factor authentication.
+	/// The `access_token` comes from the `Credentials` returned by `initiate_session`.
+	pub async fn submit_2fa(
+		&self,
+		access_token: &str,
+		totp_code: u32,
+	) -> Result<(), LoginError> {
+		use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+		use base64::Engine;
+		use crate::crypto::sha256;
+		use crate::id::generated_id::GENERATED_ID_BYTES_LENGTH;
+		use crate::util::BASE64_EXT;
+
+		let bytes = BASE64_URL_SAFE_NO_PAD
+			.decode(access_token)
+			.map_err(|e| LoginError::InvalidKey {
+				error_message: format!("invalid access token: {e}"),
+			})?;
+		if bytes.len() < GENERATED_ID_BYTES_LENGTH {
+			return Err(LoginError::InvalidKey {
+				error_message: "access token too short".to_string(),
+			});
+		}
+		let (list_id_bytes, element_id_bytes) = bytes.split_at(GENERATED_ID_BYTES_LENGTH);
+		let session_id = IdTupleCustom {
+			list_id: GeneratedId(BASE64_EXT.encode(list_id_bytes)),
+			element_id: CustomId(BASE64_URL_SAFE_NO_PAD.encode(sha256(element_id_bytes))),
+		};
+
+		let service_executor = self.make_unauthenticated_service_executor();
+		service_executor
+			.post::<SecondFactorAuthService>(
+				SecondFactorAuthData {
+					_format: 0,
+					r#type: Some(1),
+					otpCode: Some(totp_code as i64),
+					session: Some(session_id),
+					u2f: None,
+					webauthn: None,
+				},
+				ExtraServiceParams::default(),
+			)
+			.await
+			.map_err(|e| LoginError::InvalidKey {
+				error_message: format!("2FA submission failed: {e}"),
+			})?;
+
+		Ok(())
+	}
+
+	/// Check whether the server is still waiting for a second factor.
+	/// Returns `true` if 2FA is still pending, `false` once authenticated.
+	pub async fn check_2fa_pending(
+		&self,
+		access_token: &str,
+	) -> Result<bool, LoginError> {
+		let service_executor = self.make_unauthenticated_service_executor();
+		let result = service_executor
+			.get::<SecondFactorAuthService>(
+				SecondFactorAuthGetData {
+					_format: 0,
+					accessToken: access_token.to_string(),
+				},
+				ExtraServiceParams::default(),
+			)
+			.await
+			.map_err(|e| LoginError::InvalidKey {
+				error_message: format!("2FA poll failed: {e}"),
+			})?;
+
+		Ok(result.secondFactorPending)
+	}
+
 	fn new_internal(
 		base_url: String,
 		rest_client: Arc<dyn RestClient>,
