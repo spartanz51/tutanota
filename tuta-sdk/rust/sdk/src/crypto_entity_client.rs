@@ -129,6 +129,31 @@ impl CryptoEntityClient {
 		self.process_server_response(parsed_entities).await
 	}
 
+	/// Decrypt and map a parsed entity using a pre-resolved session key from
+	/// a parent entity. Used for blob elements that don't carry their own
+	/// `_ownerEncSessionKey` (e.g. `MailDetailsBlob` inherits from `Mail`).
+	pub fn decrypt_with_owner_key<T: Entity + DeserializeOwned>(
+		&self,
+		parsed_entity: ParsedEntity,
+		session_key: &GenericAesKey,
+		owner_enc_session_key: Vec<u8>,
+		owner_key_version: u64,
+	) -> Result<T, ApiCallError> {
+		let type_model = self.entity_client.resolve_server_type_ref(&T::type_ref())?;
+		let resolved = crate::crypto::crypto_facade::ResolvedSessionKey {
+			session_key: session_key.clone(),
+			owner_enc_session_key,
+			owner_key_version,
+			sender_identity_pub_key: None,
+		};
+		let decrypted = self
+			.entity_facade
+			.decrypt_and_map(&type_model, parsed_entity, resolved)?;
+		self.instance_mapper
+			.parse_entity::<T>(decrypted)
+			.map_err(|e| ApiCallError::internal_with_err(e, "Failed to map decrypted blob entity"))
+	}
+
 	#[allow(dead_code)] // will be used but rustc can't see it in some configurations right now
 	/// Loads and decrypts multiple list element entities by their element IDs.
 	/// Does not guarantee order or completeness of returned elements.
