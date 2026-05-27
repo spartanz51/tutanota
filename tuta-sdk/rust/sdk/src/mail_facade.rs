@@ -4,8 +4,8 @@ use crate::crypto_entity_client::CryptoEntityClient;
 use crate::element_value::ParsedEntity;
 use crate::entities::generated::sys::{Group, GroupInfo};
 use crate::entities::generated::tutanota::{
-	Mail, MailBox, MailDetails, MailDetailsBlob, MailSet, MailboxGroupRoot, SimpleMoveMailPostIn,
-	UnreadMailStatePostIn,
+	Mail, MailBox, MailDetails, MailDetailsBlob, MailSet, MailboxGroupRoot, MoveMailData,
+	SimpleMoveMailPostIn, UnreadMailStatePostIn,
 };
 use crate::entities::Entity;
 use crate::folder_system::{FolderSystem, MailSetKind};
@@ -16,7 +16,9 @@ use crate::json_serializer::JsonSerializer;
 #[cfg_attr(test, mockall_double::double)]
 use crate::key_loader_facade::KeyLoaderFacade;
 use crate::rest_error::HttpError;
-use crate::services::generated::tutanota::{SimpleMoveMailService, UnreadMailStateService};
+use crate::services::generated::tutanota::{
+	MoveMailService, SimpleMoveMailService, UnreadMailStateService,
+};
 #[cfg_attr(test, mockall_double::double)]
 use crate::services::service_executor::ResolvingServiceExecutor;
 #[cfg_attr(test, mockall_double::double)]
@@ -203,6 +205,32 @@ impl MailFacade {
 
 		Ok(())
 	}
+
+	/// Move mail(s) to an arbitrary folder (system or custom), identified by
+	/// the target `MailSet` id. Mirrors TS `MailFacade.moveMails`.
+	pub async fn move_mails(
+		&self,
+		mut mails: Vec<IdTupleGenerated>,
+		target_folder: IdTupleGenerated,
+	) -> Result<(), ApiCallError> {
+		mails.dedup();
+		for mail in mails.chunks(MAX_MAIL_UPDATE_LIMIT) {
+			self.service_executor
+				.post::<MoveMailService>(
+					MoveMailData {
+						_format: 0,
+						moveReason: None,
+						targetFolder: target_folder.clone(),
+						mails: mail.to_vec(),
+						excludeMailSet: None,
+					},
+					Default::default(),
+				)
+				.await?;
+		}
+
+		Ok(())
+	}
 }
 
 #[uniffi::export]
@@ -320,13 +348,13 @@ mod tests {
 	use crate::blobs::blob_access_token_facade::MockBlobAccessTokenFacade;
 	use crate::blobs::blob_facade::BlobFacade;
 	use crate::crypto_entity_client::MockCryptoEntityClient;
-	use crate::entities::generated::tutanota::{MoveMailPostOut, SimpleMoveMailPostIn};
+	use crate::entities::generated::tutanota::{MoveMailData, MoveMailPostOut, SimpleMoveMailPostIn};
 	use crate::folder_system::MailSetKind;
 	use crate::instance_mapper::InstanceMapper;
 	use crate::json_serializer::JsonSerializer;
 	use crate::key_loader_facade::MockKeyLoaderFacade;
 	use crate::mail_facade::MailFacade;
-	use crate::services::generated::tutanota::SimpleMoveMailService;
+	use crate::services::generated::tutanota::{MoveMailService, SimpleMoveMailService};
 	use crate::services::generated::tutanota::UnreadMailStateService;
 	use crate::services::service_executor::MockResolvingServiceExecutor;
 	use crate::type_model_provider::TypeModelProvider;
@@ -543,6 +571,30 @@ mod tests {
 			});
 		let facade = make_test_facade(executor);
 		facade.trash_mails(mails).await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn move_mails_posts_target_folder() {
+		let mut executor = MockResolvingServiceExecutor::default();
+		let mails = generate_id_tuples(2);
+		let target = IdTupleGenerated::new(GeneratedId::test_random(), GeneratedId::test_random());
+		let invocation = MoveMailData {
+			_format: 0,
+			moveReason: None,
+			targetFolder: target.clone(),
+			mails: mails.clone(),
+			excludeMailSet: None,
+		};
+		executor
+			.expect_post::<MoveMailService>()
+			.with(eq(invocation), always())
+			.returning(|_, _| {
+				Ok(MoveMailPostOut {
+					..create_test_entity()
+				})
+			});
+		let facade = make_test_facade(executor);
+		facade.move_mails(mails, target).await.unwrap();
 	}
 
 	fn generate_id_tuples(amt: usize) -> Vec<IdTupleGenerated> {
