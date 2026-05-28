@@ -4,8 +4,8 @@ use crate::crypto_entity_client::CryptoEntityClient;
 use crate::element_value::ParsedEntity;
 use crate::entities::generated::sys::{Group, GroupInfo};
 use crate::entities::generated::tutanota::{
-	Mail, MailBox, MailDetails, MailDetailsBlob, MailSet, MailboxGroupRoot, MoveMailData,
-	SimpleMoveMailPostIn, UnreadMailStatePostIn,
+	Mail, MailBox, MailDetails, MailDetailsBlob, MailDetailsDraft, MailSet, MailboxGroupRoot,
+	MoveMailData, SimpleMoveMailPostIn, UnreadMailStatePostIn,
 };
 use crate::entities::Entity;
 use crate::folder_system::{FolderSystem, MailSetKind};
@@ -170,6 +170,66 @@ impl MailFacade {
 			owner_key_version,
 		)?;
 		Ok(blob.details)
+	}
+
+	/// Load the decrypted `MailDetails` for a `Mail` that is a draft, i.e.
+	/// whose body lives in a `MailDetailsDraft` list element rather than a
+	/// `MailDetailsBlob` archive entry. Mirrors the TS
+	/// `MailFacade.loadMailDetailsDraft()` — the session key is always
+	/// resolved from the parent `Mail` (`_ownerEncSessionKey` +
+	/// `_ownerGroup` + `_ownerKeyVersion`), never from the
+	/// `MailDetailsDraft` itself, because the draft's own
+	/// `_ownerEncSessionKey` is allowed to be absent on the wire.
+	pub async fn load_mail_details_draft(
+		&self,
+		mail: &Mail,
+	) -> Result<MailDetails, ApiCallError> {
+		if mail.mailDetails.is_some() {
+			return Err(ApiCallError::internal(
+				"not supported, must be mail details draft".to_owned(),
+			));
+		}
+		let draft_id = mail
+			.mailDetailsDraft
+			.as_ref()
+			.ok_or_else(|| ApiCallError::internal("Mail has no mailDetailsDraft ID".to_owned()))?;
+
+		let owner_enc_sk = mail
+			._ownerEncSessionKey
+			.as_ref()
+			.ok_or_else(|| ApiCallError::internal("Mail missing _ownerEncSessionKey".to_owned()))?;
+		let owner_group = mail
+			._ownerGroup
+			.as_ref()
+			.ok_or_else(|| ApiCallError::internal("Mail missing _ownerGroup".to_owned()))?;
+		let owner_key_version = mail._ownerKeyVersion.unwrap_or(0).unsigned_abs();
+
+		let group_key = self
+			.key_loader_facade
+			.load_sym_group_key(owner_group, owner_key_version, None)
+			.await
+			.map_err(|e| ApiCallError::internal(format!("Failed to load group key: {e}")))?;
+		let session_key = group_key
+			.decrypt_aes_key(owner_enc_sk)
+			.map_err(|e| ApiCallError::internal(format!("Failed to decrypt session key: {e}")))?;
+
+		// `MailDetailsDraft` is a regular list element (not a blob), so the
+		// standard list-element REST path is the right fetch — go through
+		// `CryptoEntityClient::load_encrypted` which returns the typed
+		// `ParsedEntity` *without* auto-decrypting it (we will decrypt with
+		// the Mail's session key, not the draft's).
+		let type_ref = MailDetailsDraft::type_ref();
+		let parsed = self
+			.crypto_entity_client
+			.load_encrypted(&type_ref, draft_id)
+			.await?;
+		let draft: MailDetailsDraft = self.crypto_entity_client.decrypt_with_owner_key(
+			parsed,
+			&session_key,
+			owner_enc_sk.clone(),
+			owner_key_version,
+		)?;
+		Ok(draft.details)
 	}
 
 	/// Invoke the SimpleMoveMail service to move mail(s) to the first folder of a given folder
@@ -348,7 +408,9 @@ mod tests {
 	use crate::blobs::blob_access_token_facade::MockBlobAccessTokenFacade;
 	use crate::blobs::blob_facade::BlobFacade;
 	use crate::crypto_entity_client::MockCryptoEntityClient;
-	use crate::entities::generated::tutanota::{MoveMailData, MoveMailPostOut, SimpleMoveMailPostIn};
+	use crate::entities::generated::tutanota::{
+		Mail, MoveMailData, MoveMailPostOut, SimpleMoveMailPostIn,
+	};
 	use crate::folder_system::MailSetKind;
 	use crate::instance_mapper::InstanceMapper;
 	use crate::json_serializer::JsonSerializer;
@@ -603,5 +665,72 @@ mod tests {
 		})
 		.take(amt)
 		.collect()
+	}
+
+	// --- load_mail_details_draft early-return contract ---
+	//
+	// The happy path (real REST + crypto) is covered by the live bridge
+	// integration that consumes this method. Here we lock down the contract
+	// for the three cheap error shapes — they require no mocks.
+
+	#[tokio::test]
+	async fn load_mail_details_draft_rejects_a_non_draft_mail() {
+		// A Mail that has `mailDetails` set (received mail) must be routed
+		// to `load_mail_details_blob`, not the draft path.
+		let mut mail: Mail = create_test_entity();
+		mail.mailDetails = Some(IdTupleGenerated::new(
+			GeneratedId::test_random(),
+			GeneratedId::test_random(),
+		));
+		mail.mailDetailsDraft = None;
+		let facade = make_test_facade(MockResolvingServiceExecutor::default());
+		let err = facade
+			.load_mail_details_draft(&mail)
+			.await
+			.expect_err("must reject a received mail");
+		assert!(
+			format!("{err:?}").contains("must be mail details draft"),
+			"unexpected error: {err:?}",
+		);
+	}
+
+	#[tokio::test]
+	async fn load_mail_details_draft_requires_a_draft_id() {
+		// Neither `mailDetails` nor `mailDetailsDraft` set: the mail is
+		// malformed for this code path.
+		let mut mail: Mail = create_test_entity();
+		mail.mailDetails = None;
+		mail.mailDetailsDraft = None;
+		let facade = make_test_facade(MockResolvingServiceExecutor::default());
+		let err = facade
+			.load_mail_details_draft(&mail)
+			.await
+			.expect_err("must reject a mail with no draft id");
+		assert!(
+			format!("{err:?}").contains("mailDetailsDraft"),
+			"unexpected error: {err:?}",
+		);
+	}
+
+	#[tokio::test]
+	async fn load_mail_details_draft_requires_owner_enc_session_key() {
+		// `mailDetailsDraft` set but no `_ownerEncSessionKey`: we cannot
+		// resolve the session key, refuse to silently succeed.
+		let mut mail: Mail = create_test_entity();
+		mail.mailDetails = None;
+		mail.mailDetailsDraft = Some(IdTupleGenerated::new(
+			GeneratedId::test_random(),
+			GeneratedId::test_random(),
+		));
+		mail._ownerEncSessionKey = None;
+		let facade = make_test_facade(MockResolvingServiceExecutor::default());
+		let err = facade
+			.load_mail_details_draft(&mail)
+			.await
+			.expect_err("must reject a mail without _ownerEncSessionKey");
+		assert!(
+			format!("{err:?}").contains("_ownerEncSessionKey"),
+			"unexpected error: {err:?}",
+		);
 	}
 }
