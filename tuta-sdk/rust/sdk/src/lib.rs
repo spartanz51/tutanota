@@ -77,6 +77,7 @@ mod key_loader_facade;
 mod logging;
 pub mod login;
 mod mail_facade;
+pub mod mail_set_entry_id;
 mod metamodel;
 
 pub mod bindings;
