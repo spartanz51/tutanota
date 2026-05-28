@@ -44,6 +44,18 @@ const RECONNECT_SMALL: (u64, u64) = (5, 10);
 const RECONNECT_MEDIUM: (u64, u64) = (20, 40);
 const RECONNECT_LARGE: (u64, u64) = (60, 120);
 
+// Heartbeat: send a WebSocket Ping at this cadence so the server (or any NAT /
+// firewall in between) gets keep-alive traffic and any half-closed TCP socket
+// surfaces as an immediate write error.
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
+
+// Read-side liveness check: if no frame (data, Ping, Pong, …) arrives within
+// this window, treat the socket as dead and force a reconnect. The TS client
+// rides on the browser's automatic WebSocket keep-alive; in Rust we have to
+// detect zombie sockets ourselves. 90s is comfortably above the 60s heartbeat
+// round-trip and well under typical consumer NAT timeouts (~120-300s).
+const IDLE_TIMEOUT: Duration = Duration::from_secs(90);
+
 // Numeric attribute ids from the model; these are the field tags the server
 // uses on the wire. Keep them centralised so the parser stays grep-able if the
 // model ever evolves.
@@ -132,8 +144,7 @@ pub enum EventBusMessage {
 
 /// Observable connection state of an `EventBusClient`. Subscribe via
 /// [`EventBusClient::state`] to surface the value to a UI.
-#[cfg_attr(any(test, feature = "testing"), derive(Debug))]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WsState {
 	/// Idle. `run` has not been called, or it returned to teardown.
 	Stopped,
@@ -268,6 +279,11 @@ impl EventBusClient {
 
 			let (mut stream, _resp) = match connection {
 				Ok(s) => {
+					if failed_attempts > 0 {
+						info!("ws connected (after {failed_attempts} failed attempt(s))");
+					} else {
+						info!("ws connected");
+					}
 					failed_attempts = 0;
 					publish(WsState::Connected);
 					s
@@ -283,44 +299,80 @@ impl EventBusClient {
 				},
 			};
 
+			// Background task that nudges us every HEARTBEAT_INTERVAL to send a
+			// Ping. Going through an mpsc rather than sharing the stream lets
+			// the read-loop keep exclusive ownership of `stream` (and is what
+			// makes the heartbeat cleanly cancellable on every reconnect).
+			let (ping_tx, mut ping_rx) = mpsc::channel::<()>(2);
+			let heartbeat = tokio::spawn(async move {
+				loop {
+					tokio::time::sleep(HEARTBEAT_INTERVAL).await;
+					if ping_tx.send(()).await.is_err() {
+						return;
+					}
+				}
+			});
+
 			// Read frames until the connection closes.
 			let mut close_hint: Option<CloseAction> = None;
-			loop {
+			let close_reason = loop {
 				tokio::select! {
 					_ = shutdown.changed() => {
 						let _ = stream.send(Message::Close(None)).await;
+						heartbeat.abort();
 						return Err(EventBusError::Stopped);
 					}
-					frame = stream.next() => match frame {
-						None => break,
-						Some(Err(e)) => {
-							warn!("ws frame error: {e}");
-							break;
+					Some(()) = ping_rx.recv() => {
+						if let Err(e) = stream.send(Message::Ping(Vec::new())).await {
+							warn!("ws heartbeat send failed: {e}");
+							break "heartbeat-send-failed";
 						}
-						Some(Ok(Message::Text(text))) => match parse_message(&text) {
+						debug!("ws heartbeat ping sent");
+					}
+					frame = tokio::time::timeout(IDLE_TIMEOUT, stream.next()) => match frame {
+						Err(_) => {
+							warn!(
+								"ws: no frame for {}s — forcing reconnect (probable zombie socket)",
+								IDLE_TIMEOUT.as_secs()
+							);
+							break "idle-timeout";
+						}
+						Ok(None) => break "stream-end",
+						Ok(Some(Err(e))) => {
+							warn!("ws frame error: {e}");
+							break "frame-error";
+						}
+						Ok(Some(Ok(Message::Text(text)))) => match parse_message(&text) {
 							Ok(msg) => {
 								if out.send(msg).await.is_err() {
+									heartbeat.abort();
 									return Err(EventBusError::Stopped);
 								}
 							},
 							Err(e) => warn!("ws parse: {e}"),
 						},
-						Some(Ok(Message::Ping(p))) => {
+						Ok(Some(Ok(Message::Ping(p)))) => {
 							let _ = stream.send(Message::Pong(p)).await;
 						}
-						Some(Ok(Message::Close(cf))) => {
+						Ok(Some(Ok(Message::Pong(_)))) => {
+							debug!("ws pong received");
+						}
+						Ok(Some(Ok(Message::Close(cf)))) => {
 							let code = cf.map(|f| u16::from(f.code)).unwrap_or(0);
 							let action = close_action(code);
 							if let CloseAction::Terminate(c) = action {
+								heartbeat.abort();
 								return Err(EventBusError::AuthenticationRejected(c));
 							}
 							close_hint = Some(action);
-							break;
+							break "close-frame";
 						}
-						Some(Ok(_)) => {}
+						Ok(Some(Ok(_))) => {}
 					},
 				}
-			}
+			};
+			heartbeat.abort();
+			debug!("ws inner loop exited: {close_reason}");
 
 			failed_attempts = failed_attempts.saturating_add(1);
 			publish(WsState::Reconnecting);
@@ -342,7 +394,7 @@ impl EventBusClient {
 	) -> bool {
 		let (lo, hi) = reconnect_interval(failed_attempts, close);
 		let secs = pick_random(lo, hi);
-		debug!("ws reconnect in {secs}s (attempt #{failed_attempts})");
+		info!("ws reconnect in {secs}s (attempt #{failed_attempts})");
 		tokio::select! {
 			_ = shutdown.changed() => true,
 			_ = tokio::time::sleep(Duration::from_secs(secs)) => false,
@@ -654,6 +706,32 @@ mod tests {
 			},
 			other => panic!("wrong variant {:?}", other),
 		}
+	}
+
+	#[test]
+	fn heartbeat_fires_before_idle_timeout() {
+		// We must send (and receive, via the server's Pong reply) a frame
+		// inside IDLE_TIMEOUT — otherwise a perfectly healthy connection
+		// would be killed every IDLE_TIMEOUT seconds. Keep at least 20s
+		// headroom for round-trip latency under adverse network conditions.
+		assert!(
+			HEARTBEAT_INTERVAL + Duration::from_secs(20) <= IDLE_TIMEOUT,
+			"HEARTBEAT_INTERVAL ({:?}) is too close to IDLE_TIMEOUT ({:?})",
+			HEARTBEAT_INTERVAL,
+			IDLE_TIMEOUT
+		);
+	}
+
+	#[test]
+	fn heartbeat_interval_is_below_typical_nat_timeout() {
+		// Consumer NATs commonly drop idle UDP/TCP flows after 120s; many
+		// firewalls go down to 60s. Keep some margin to refresh the flow
+		// before the gateway forgets us.
+		assert!(
+			HEARTBEAT_INTERVAL <= Duration::from_secs(90),
+			"HEARTBEAT_INTERVAL ({:?}) risks letting NATs evict the flow",
+			HEARTBEAT_INTERVAL
+		);
 	}
 
 	#[test]
