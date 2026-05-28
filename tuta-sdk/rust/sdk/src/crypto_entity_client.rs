@@ -84,6 +84,19 @@ impl CryptoEntityClient {
 		Ok(typed_entity)
 	}
 
+	/// Fetch an entity by id and JSON-parse it, but skip the auto-decryption
+	/// step that `load` / `load_untyped` perform. Useful when the caller has
+	/// the session key from elsewhere (e.g. a parent `Mail`) and will
+	/// decrypt the result with [`Self::decrypt_with_owner_key`] — the same
+	/// pattern `MailFacade::load_mail_details_blob` already uses for blobs.
+	pub async fn load_encrypted<ID: IdType>(
+		&self,
+		type_ref: &TypeRef,
+		id: &ID,
+	) -> Result<ParsedEntity, ApiCallError> {
+		self.entity_client.load(type_ref, id).await
+	}
+
 	pub async fn load_untyped<ID: IdType>(
 		&self,
 		type_ref: &TypeRef,
