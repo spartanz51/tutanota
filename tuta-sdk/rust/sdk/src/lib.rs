@@ -77,6 +77,8 @@ mod metamodel;
 
 pub mod bindings;
 pub mod blobs;
+#[cfg(feature = "net")]
+pub mod event_bus;
 mod id;
 #[cfg(feature = "net")]
 pub mod net;

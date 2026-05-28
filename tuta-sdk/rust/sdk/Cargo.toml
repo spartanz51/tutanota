@@ -62,6 +62,10 @@ hyper-rustls = { version = "0.27.7", features = [
     "http2",
 ], optional = true }
 rustls = { version = "0.23.37", optional = true }
+tokio-tungstenite = { version = "0.24", default-features = false, features = [
+    "connect",
+    "rustls-tls-webpki-roots",
+], optional = true }
 form_urlencoded = "1"
 
 # allow initializing a simple_logger if the consuming application (or examples) want to do that.
@@ -85,6 +89,7 @@ net = [
     "dep:http-body-util",
     "dep:hyper-rustls",
     "dep:rustls",
+    "dep:tokio-tungstenite",
 ]
 # turns on the simple_logger logger when the sdk is initialized.
 logging = ["dep:simple_logger"]
