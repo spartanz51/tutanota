@@ -84,6 +84,77 @@ impl CryptoEntityClient {
 		Ok(typed_entity)
 	}
 
+	/// Decrypt and type-map an entity payload that arrived inline (e.g.
+	/// embedded in a WebSocket event) instead of being fetched via REST.
+	///
+	/// Mirrors `getParsedInstanceFromEntityEvent` in the TS `EventBusClient`:
+	/// the server pushes the still-encrypted entity inside `EntityUpdate.instance`,
+	/// and the client can decrypt it locally rather than spending a round-trip
+	/// to load the same data via REST.
+	///
+	/// Returns `Ok(None)` when the session key cannot be resolved — a
+	/// transient state that happens, for example, after a reply when the
+	/// `_ownerEncSessionKey` of attachments is not yet propagated. The TS
+	/// client handles this case by silently skipping the event; we expose
+	/// the same intent through the `Option` so the caller can decide whether
+	/// to retry, fall back to a REST `load`, or drop the update.
+	pub async fn decrypt_inline_and_parse<T: Entity + DeserializeOwned>(
+		&self,
+		json_str: &str,
+	) -> Result<Option<T>, ApiCallError> {
+		let type_ref = T::type_ref();
+		let type_model = self.entity_client.resolve_server_type_ref(&type_ref)?;
+
+		let raw_entity: crate::json_element::RawEntity =
+			serde_json::from_str(json_str).map_err(|e| {
+				ApiCallError::internal(format!("decrypt_inline: malformed JSON: {e}"))
+			})?;
+		let parsed = self.entity_client.parse_raw(&type_ref, raw_entity)?;
+
+		// Unencrypted types skip the crypto pipeline entirely.
+		if !type_model.marked_encrypted() {
+			let typed = self.instance_mapper.parse_entity::<T>(parsed).map_err(|e| {
+				ApiCallError::internal_with_err(e, "decrypt_inline: map failed")
+			})?;
+			return Ok(Some(typed));
+		}
+
+		// Resolve the session key. A failure here is the inline analogue of
+		// the TS `SessionKeyNotFoundError`: a real wire-format/JSON issue
+		// would already have failed `parse_raw` above, so reaching this point
+		// with no key is the transient "key not yet propagated" case.
+		let resolved = match self
+			.crypto_facade
+			.resolve_session_key(&parsed, &type_model)
+			.await
+		{
+			Ok(Some(key)) => key,
+			Ok(None) => {
+				// `resolve_session_key` only returns `Ok(None)` for
+				// unencrypted types, which we filtered above; if we still
+				// get None here treat it as a transient miss for safety.
+				return Ok(None);
+			},
+			Err(e) => {
+				log::debug!(
+					"decrypt_inline: session key unresolved for {} ({e}); skipping",
+					type_model.name,
+				);
+				return Ok(None);
+			},
+		};
+
+		let decrypted = self
+			.entity_facade
+			.decrypt_and_map(&type_model, parsed, resolved)?;
+
+		let typed = self
+			.instance_mapper
+			.parse_entity::<T>(decrypted)
+			.map_err(|e| ApiCallError::internal_with_err(e, "decrypt_inline: map failed"))?;
+		Ok(Some(typed))
+	}
+
 	pub async fn load_untyped<ID: IdType>(
 		&self,
 		type_ref: &TypeRef,
