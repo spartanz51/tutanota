@@ -10,8 +10,8 @@ use crate::blobs::binary_blob_wrapper_serializer::{
 use crate::blobs::blob_access_token_cache::BlobWriteTokenKey;
 #[cfg_attr(test, mockall_double::double)]
 use crate::blobs::blob_access_token_facade::BlobAccessTokenFacade;
-use crate::entities::generated::storage::{BlobGetIn, BlobPostOut, BlobServerAccessInfo};
-use crate::entities::generated::sys::BlobReferenceTokenWrapper;
+use crate::entities::generated::storage::{BlobGetIn, BlobId, BlobPostOut, BlobServerAccessInfo};
+use crate::entities::generated::sys::{Blob, BlobReferenceTokenWrapper};
 use crate::entities::Entity;
 use crate::instance_mapper::InstanceMapper;
 use crate::json_element::RawEntity;
@@ -21,6 +21,7 @@ use crate::tutanota_constants::{
 	ArchiveDataType, MAX_BLOB_SERVICE_BYTES, MAX_UNENCRYPTED_BLOB_SIZE_BYTES,
 };
 use crate::type_model_provider::TypeModelProvider;
+use crate::util::BASE64_EXT;
 use crate::GeneratedId;
 use crate::{crypto, ApiCallError, HeadersProvider, TypeRef};
 use base64::Engine;
@@ -179,6 +180,188 @@ impl BlobFacade {
 					}
 				}
 			}));
+		}
+	}
+
+	/// Download every blob that makes up the binary content of an entity
+	/// (typically a [`crate::entities::generated::tutanota::File`] attachment),
+	/// decrypt each blob with the supplied `session_key`, and concatenate the
+	/// pieces in the order of `blobs`. Mirrors TS
+	/// `BlobFacade.downloadAndDecrypt()` for the common case where all blobs
+	/// of one instance share a single archive — which is what file
+	/// attachments always look like in practice.
+	///
+	/// `archive_data_type` is the kind of payload these blobs represent
+	/// ([`ArchiveDataType::Attachments`] for files,
+	/// [`ArchiveDataType::MailDetails`] for mail bodies). It scopes the read
+	/// token request.
+	pub async fn download_and_decrypt(
+		&self,
+		archive_data_type: ArchiveDataType,
+		blobs: &[Blob],
+		session_key: &GenericAesKey,
+	) -> Result<Vec<u8>, ApiCallError> {
+		let _ = archive_data_type; // archive token is keyed on archive id only
+		if blobs.is_empty() {
+			return Ok(Vec::new());
+		}
+
+		// Group blobs by archive id — TS does the same because in general
+		// nothing prevents an instance's blobs from being spread across
+		// archives, even if file attachments don't do that today.
+		let mut by_archive: HashMap<&GeneratedId, Vec<&Blob>> = HashMap::new();
+		for blob in blobs {
+			by_archive.entry(&blob.archiveId).or_default().push(blob);
+		}
+
+		let mut encrypted_by_id: HashMap<GeneratedId, Vec<u8>> = HashMap::new();
+		for (archive_id, archive_blobs) in by_archive {
+			let mut attempt = 0u8;
+			let downloaded = loop {
+				match self
+					.download_blobs_of_one_archive(archive_id, &archive_blobs)
+					.await
+				{
+					Ok(map) => break map,
+					Err(ApiCallError::ServerResponseError {
+						source: HttpError::NotAuthorizedError,
+					}) if attempt == 0 => {
+						self.blob_access_token_facade
+							.evict_archive_token(archive_id);
+						attempt += 1;
+						continue;
+					},
+					Err(e) => return Err(e),
+				}
+			};
+			encrypted_by_id.extend(downloaded);
+		}
+
+		let mut out = Vec::new();
+		for blob in blobs {
+			let encrypted = encrypted_by_id.remove(&blob.blobId).ok_or_else(|| {
+				ApiCallError::internal(format!(
+					"Server did not return blob {} of archive {}",
+					blob.blobId, blob.archiveId
+				))
+			})?;
+			let decrypted = session_key.decrypt_data(&encrypted).map_err(|e| {
+				ApiCallError::internal(format!(
+					"Failed to decrypt blob {}: {e}",
+					blob.blobId
+				))
+			})?;
+			out.extend_from_slice(&decrypted);
+		}
+		Ok(out)
+	}
+
+	/// Download (encrypted) every blob of a single archive in one request,
+	/// returning a map from blob id to the still-encrypted bytes. Mirrors
+	/// TS `BlobFacade.downloadBlobsOfOneArchive()`. The caller is
+	/// responsible for the per-blob decryption.
+	async fn download_blobs_of_one_archive(
+		&self,
+		archive_id: &GeneratedId,
+		blobs: &[&Blob],
+	) -> Result<HashMap<GeneratedId, Vec<u8>>, ApiCallError> {
+		let access_info = self
+			.blob_access_token_facade
+			.request_read_token_archive(archive_id)
+			.await?;
+
+		let blob_get_in = BlobGetIn {
+			_format: 0,
+			archiveId: archive_id.clone(),
+			blobId: None,
+			blobIds: blobs
+				.iter()
+				.map(|b| BlobId {
+					_id: None,
+					blobId: b.blobId.clone(),
+				})
+				.collect(),
+		};
+		let parsed = self
+			.instance_mapper
+			.serialize_entity(blob_get_in)
+			.map_err(|e| {
+				ApiCallError::internal(format!("Failed to serialize BlobGetIn: {e}"))
+			})?;
+		let raw = self
+			.json_serializer
+			.serialize(&BlobGetIn::type_ref(), parsed)?;
+		let body = serde_json::to_vec(&raw).map_err(|e| {
+			ApiCallError::internal(format!("Failed to JSON-encode BlobGetIn: {e}"))
+		})?;
+
+		let query_params = self.create_query_params_multiple_blobs(access_info.blobAccessToken);
+		let encoded = rest_client::encode_query_params(query_params);
+
+		let mut last_error: Option<ApiCallError> = None;
+		let mut got_unauthorized = false;
+		for server in &access_info.servers {
+			let url = format!("{}{}{}", server.url, BLOB_SERVICE_REST_PATH, encoded);
+			let response = self
+				.rest_client
+				.request_binary(
+					url,
+					GET,
+					RestClientOptions {
+						body: Some(body.clone()),
+						headers: Default::default(),
+						suspension_behavior: None,
+					},
+				)
+				.await;
+
+			match response {
+				Ok(RestResponse {
+					status: 200 | 201,
+					body: Some(bytes),
+					..
+				}) => return parse_multiple_blobs_response(&bytes),
+				Ok(RestResponse {
+					status: 200 | 201,
+					body: None,
+					..
+				}) => {
+					last_error = Some(ApiCallError::internal(
+						"Empty 2xx response from blob server".to_owned(),
+					));
+					continue;
+				},
+				Ok(RestResponse { status, .. }) => {
+					match HttpError::from_http_response(status, &Default::default()) {
+						Ok(HttpError::NotAuthorizedError) => {
+							got_unauthorized = true;
+							break;
+						},
+						Ok(
+							err @ (HttpError::ConnectionError
+							| HttpError::InternalServerError
+							| HttpError::NotFoundError),
+						) => {
+							last_error = Some(err.into());
+							continue;
+						},
+						Ok(other) => return Err(other.into()),
+						Err(e) => return Err(e),
+					}
+				},
+				Err(e) => {
+					last_error = Some(e.into());
+					continue;
+				},
+			}
+		}
+
+		if got_unauthorized {
+			Err(HttpError::NotAuthorizedError.into())
+		} else {
+			Err(last_error.unwrap_or_else(|| ApiCallError::InternalSdkError {
+				error_message: "no blob servers available".to_owned(),
+			}))
 		}
 	}
 
@@ -600,6 +783,78 @@ impl BlobFacade {
 		query_params.extend(auth_headers);
 		query_params
 	}
+}
+
+/// Parse the binary response of a multi-blob `GET /rest/storage/blobservice`
+/// request. Mirrors TS `parseMultipleBlobsResponse`. Wire format:
+///
+/// ```text
+///   [4 bytes: blob count (big-endian i32)]
+///   per blob:
+///     [9 bytes: blob id (raw bytes, encoded as base64ext for the GeneratedId)]
+///     [6 bytes: blob hash — ignored on read]
+///     [4 bytes: blob size (big-endian i32)]
+///     [`blob size` bytes: encrypted blob payload]
+/// ```
+pub(crate) fn parse_multiple_blobs_response(
+	data: &[u8],
+) -> Result<HashMap<GeneratedId, Vec<u8>>, ApiCallError> {
+	if data.len() < 4 {
+		return Err(ApiCallError::internal(
+			"Blob response too short to contain blob count".to_owned(),
+		));
+	}
+	let blob_count = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+	if blob_count < 0 {
+		return Err(ApiCallError::internal(format!(
+			"Invalid blob count: {blob_count}"
+		)));
+	}
+	let blob_count = blob_count as usize;
+	if blob_count == 0 {
+		return Ok(HashMap::new());
+	}
+
+	let mut result = HashMap::with_capacity(blob_count);
+	let mut offset = 4usize;
+	while offset < data.len() {
+		if offset + 19 > data.len() {
+			return Err(ApiCallError::internal(
+				"Blob response truncated inside an entry header".to_owned(),
+			));
+		}
+		let blob_id_bytes = &data[offset..offset + 9];
+		let blob_id = GeneratedId(BASE64_EXT.encode(blob_id_bytes));
+		// 6-byte hash at offset+9..offset+15 — not used on the read path
+		let blob_size = i32::from_be_bytes([
+			data[offset + 15],
+			data[offset + 16],
+			data[offset + 17],
+			data[offset + 18],
+		]);
+		if blob_size < 0 {
+			return Err(ApiCallError::internal(format!(
+				"Invalid blob size: {blob_size}"
+			)));
+		}
+		let data_start = offset + 19;
+		let data_end = data_start + blob_size as usize;
+		if data_end > data.len() {
+			return Err(ApiCallError::internal(format!(
+				"Blob response truncated: declared size {blob_size}, remaining {}",
+				data.len() - data_start
+			)));
+		}
+		result.insert(blob_id, data[data_start..data_end].to_vec());
+		offset = data_end;
+	}
+	if result.len() != blob_count {
+		return Err(ApiCallError::internal(format!(
+			"Blob response declared {blob_count} blob(s) but parsed {}",
+			result.len()
+		)));
+	}
+	Ok(result)
 }
 
 /// The ".chunks" function returns an empty iterator if the data length
@@ -1515,6 +1770,86 @@ mod tests {
 
 		// a hash map as input
 		assert_eq!("", encode_query_params(HashMap::<String, &[u8]>::default()))
+	}
+
+	/// Helper for the parser tests: lays out one entry's worth of bytes in
+	/// the exact wire format we expect from the blob server.
+	fn make_blob_entry(blob_id_bytes: [u8; 9], data: &[u8]) -> Vec<u8> {
+		let mut buf = Vec::with_capacity(19 + data.len());
+		buf.extend_from_slice(&blob_id_bytes);
+		buf.extend_from_slice(&[0u8; 6]); // 6-byte hash, unused on read
+		buf.extend_from_slice(&(data.len() as i32).to_be_bytes());
+		buf.extend_from_slice(data);
+		buf
+	}
+
+	#[test]
+	fn parse_multiple_blobs_response_empty() {
+		let mut data = Vec::new();
+		data.extend_from_slice(&0i32.to_be_bytes());
+		let result = parse_multiple_blobs_response(&data).unwrap();
+		assert!(result.is_empty());
+	}
+
+	#[test]
+	fn parse_multiple_blobs_response_single() {
+		let mut data = Vec::new();
+		data.extend_from_slice(&1i32.to_be_bytes());
+		let payload = b"hello blob world";
+		data.extend_from_slice(&make_blob_entry([1, 2, 3, 4, 5, 6, 7, 8, 9], payload));
+		let result = parse_multiple_blobs_response(&data).unwrap();
+		assert_eq!(result.len(), 1);
+		let id = GeneratedId(BASE64_EXT.encode([1u8, 2, 3, 4, 5, 6, 7, 8, 9]));
+		assert_eq!(result.get(&id).unwrap().as_slice(), payload);
+	}
+
+	#[test]
+	fn parse_multiple_blobs_response_multiple_preserves_ids() {
+		let mut data = Vec::new();
+		data.extend_from_slice(&3i32.to_be_bytes());
+		data.extend_from_slice(&make_blob_entry([0u8; 9], b"first"));
+		data.extend_from_slice(&make_blob_entry([0xFFu8; 9], b"second is bigger"));
+		data.extend_from_slice(&make_blob_entry([0x42u8; 9], &vec![0xAB; 1024]));
+		let result = parse_multiple_blobs_response(&data).unwrap();
+		assert_eq!(result.len(), 3);
+		assert_eq!(
+			result.get(&GeneratedId(BASE64_EXT.encode([0u8; 9]))).unwrap().as_slice(),
+			b"first"
+		);
+		assert_eq!(
+			result.get(&GeneratedId(BASE64_EXT.encode([0xFFu8; 9]))).unwrap().as_slice(),
+			b"second is bigger"
+		);
+		assert_eq!(
+			result.get(&GeneratedId(BASE64_EXT.encode([0x42u8; 9]))).unwrap().len(),
+			1024
+		);
+	}
+
+	#[test]
+	fn parse_multiple_blobs_response_rejects_short_buffer() {
+		let err = parse_multiple_blobs_response(&[0u8, 0, 0]).unwrap_err();
+		assert!(format!("{err}").contains("too short"));
+	}
+
+	#[test]
+	fn parse_multiple_blobs_response_rejects_truncated_entry() {
+		let mut data = Vec::new();
+		data.extend_from_slice(&1i32.to_be_bytes());
+		data.extend_from_slice(&[0u8; 9]); // blob id
+		data.extend_from_slice(&[0u8; 6]); // hash
+		data.extend_from_slice(&100i32.to_be_bytes()); // declares 100 bytes…
+		data.extend_from_slice(&[0u8; 10]); // …but only 10 are there
+		let err = parse_multiple_blobs_response(&data).unwrap_err();
+		assert!(format!("{err}").contains("truncated"));
+	}
+
+	#[test]
+	fn parse_multiple_blobs_response_rejects_negative_count() {
+		let mut data = Vec::new();
+		data.extend_from_slice(&(-5i32).to_be_bytes());
+		let err = parse_multiple_blobs_response(&data).unwrap_err();
+		assert!(format!("{err}").contains("Invalid blob count"));
 	}
 
 	#[test]

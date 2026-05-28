@@ -5,8 +5,9 @@ use crate::element_value::ParsedEntity;
 use crate::entities::generated::sys::{Group, GroupInfo};
 use crate::entities::generated::tutanota::{
 	Mail, MailBox, MailDetails, MailDetailsBlob, MailDetailsDraft, MailSet, MailboxGroupRoot,
-	MoveMailData, SimpleMoveMailPostIn, UnreadMailStatePostIn,
+	MoveMailData, SimpleMoveMailPostIn, TutanotaFile, UnreadMailStatePostIn,
 };
+use crate::tutanota_constants::ArchiveDataType;
 use crate::entities::Entity;
 use crate::folder_system::{FolderSystem, MailSetKind};
 use crate::groups::GroupType;
@@ -230,6 +231,47 @@ impl MailFacade {
 			owner_key_version,
 		)?;
 		Ok(draft.details)
+	}
+
+	/// Download every blob that makes up the binary payload of a file
+	/// attachment, decrypt them, and return the concatenated plaintext bytes
+	/// (i.e. the file the user would expect to save to disk). Mirrors the
+	/// TS `BlobFacade.downloadAndDecrypt(ArchiveDataType.Attachments, …)`
+	/// path used by the web client when the user opens an attachment.
+	///
+	/// `file` is expected to be the already-decrypted [`TutanotaFile`]
+	/// entity referenced from [`Mail::attachments`] — caller is responsible
+	/// for loading it (it carries the `_ownerEncSessionKey` we need here).
+	pub async fn load_file_attachment_data(
+		&self,
+		file: &TutanotaFile,
+	) -> Result<Vec<u8>, ApiCallError> {
+		let owner_enc_sk = file._ownerEncSessionKey.as_ref().ok_or_else(|| {
+			ApiCallError::internal("File missing _ownerEncSessionKey".to_owned())
+		})?;
+		let owner_group = file._ownerGroup.as_ref().ok_or_else(|| {
+			ApiCallError::internal("File missing _ownerGroup".to_owned())
+		})?;
+		let owner_key_version = file._ownerKeyVersion.unwrap_or(0).unsigned_abs();
+
+		let group_key = self
+			.key_loader_facade
+			.load_sym_group_key(owner_group, owner_key_version, None)
+			.await
+			.map_err(|e| {
+				ApiCallError::internal(format!("Failed to load group key: {e}"))
+			})?;
+		let session_key = group_key.decrypt_aes_key(owner_enc_sk).map_err(|e| {
+			ApiCallError::internal(format!("Failed to decrypt file session key: {e}"))
+		})?;
+
+		self.blob_facade
+			.download_and_decrypt(
+				ArchiveDataType::Attachments,
+				&file.blobs,
+				&session_key,
+			)
+			.await
 	}
 
 	/// Invoke the SimpleMoveMail service to move mail(s) to the first folder of a given folder
