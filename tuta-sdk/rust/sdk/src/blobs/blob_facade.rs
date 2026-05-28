@@ -22,6 +22,7 @@ use crate::tutanota_constants::{
 };
 use crate::type_model_provider::TypeModelProvider;
 use crate::util::BASE64_EXT;
+use crate::CustomId;
 use crate::GeneratedId;
 use crate::{crypto, ApiCallError, HeadersProvider, TypeRef};
 use base64::Engine;
@@ -270,6 +271,16 @@ impl BlobFacade {
 			.request_read_token_archive(archive_id)
 			.await?;
 
+		// Aggregate types with `cardinality: One` on `_id` need a random
+		// CustomId even though the field is never read by the server — same
+		// pattern as `BlobAccessTokenFacade::request_write_token` does for
+		// `BlobWriteData._id`.
+		let random_blob_id_aggregate_id = || {
+			CustomId(
+				base64::engine::general_purpose::URL_SAFE_NO_PAD
+					.encode(self.randomizer_facade.generate_random_array::<4>()),
+			)
+		};
 		let blob_get_in = BlobGetIn {
 			_format: 0,
 			archiveId: archive_id.clone(),
@@ -277,7 +288,7 @@ impl BlobFacade {
 			blobIds: blobs
 				.iter()
 				.map(|b| BlobId {
-					_id: None,
+					_id: Some(random_blob_id_aggregate_id()),
 					blobId: b.blobId.clone(),
 				})
 				.collect(),
