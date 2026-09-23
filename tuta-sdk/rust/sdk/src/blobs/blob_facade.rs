@@ -1,3 +1,5 @@
+mod read;
+
 use crate::bindings::rest_client;
 use crate::bindings::rest_client::HttpMethod::POST;
 use crate::bindings::rest_client::RestClient;
