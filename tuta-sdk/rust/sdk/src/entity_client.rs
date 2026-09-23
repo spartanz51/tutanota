@@ -1,3 +1,5 @@
+mod batch;
+
 use crate::bindings::rest_client::{HttpMethod, RestClient, RestClientOptions, RestResponse};
 use crate::bindings::suspendable_rest_client::SuspensionBehavior;
 use crate::element_value::{ElementValue, ParsedEntity};
@@ -446,6 +448,12 @@ mockall::mock! {
 			start_id: &Id,
 			count: usize,
 			list_load_direction: ListLoadDirection,
+		) -> Result<Vec<ParsedEntity>, ApiCallError>;
+		pub async fn load_multiple(
+			&self,
+			type_ref: &TypeRef,
+			list_id: &GeneratedId,
+			element_ids: &[GeneratedId],
 		) -> Result<Vec<ParsedEntity>, ApiCallError>;
 		pub async fn setup_element(&self, type_ref: &TypeRef, entity: RawEntity) -> Vec<String>;
 		pub async fn setup_list_element(
