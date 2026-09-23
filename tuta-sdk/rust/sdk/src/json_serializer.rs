@@ -74,6 +74,13 @@ impl JsonSerializer {
 
 			let mapped_value = match (&value_type.cardinality, value) {
 				(Cardinality::ZeroOrOne, JsonElement::Null) => ElementValue::Null,
+				// Older cardinality changes can leave an empty, unencrypted sentinel.
+				// Match CryptoMapper: an optional encrypted empty value means null.
+				(Cardinality::ZeroOrOne, JsonElement::String(value))
+					if value_type.encrypted && value.is_empty() =>
+				{
+					ElementValue::Null
+				},
 				(Cardinality::One, JsonElement::String(v))
 					if value_type.encrypted && v.is_empty() =>
 				{
@@ -885,3 +892,6 @@ mod tests {
 				});
 	}
 }
+
+#[cfg(test)]
+mod optional_empty_tests;
