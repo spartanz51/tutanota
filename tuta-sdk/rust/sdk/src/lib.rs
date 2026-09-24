@@ -335,6 +335,10 @@ impl Sdk {
 		mail_address: &str,
 		passphrase: &str,
 	) -> Result<Arc<LoggedInSdk>, LoginError> {
+		// Like the TS LoginFacade: the salt and the session are keyed by the
+		// normalized address.
+		let mail_address = mail_address.trim().to_lowercase();
+		let mail_address = mail_address.as_str();
 		let headers_provider = Arc::new(HeadersProvider::new(None));
 		let entity_facade = Arc::new(EntityFacadeImpl::new(
 			self.type_model_provider.clone(),
@@ -358,6 +362,17 @@ impl Sdk {
 		let salt_return = service_executor
 			.get::<SaltService>(salt_get_input, ExtraServiceParams::default())
 			.await?;
+
+		// Only Argon2id is implemented; deriving it for a Bcrypt account would
+		// send a wrong verifier and fail as a misleading authentication error.
+		if !matches!(
+			KdfType::try_from(salt_return.kdfVersion)?,
+			KdfType::Argon2id
+		) {
+			return Err(LoginError::InvalidKey {
+				error_message: "unsupported password KDF".to_string(),
+			});
+		}
 
 		let Ok(salt) = salt_return.salt.try_into() else {
 			return Err(LoginError::InvalidKey {
