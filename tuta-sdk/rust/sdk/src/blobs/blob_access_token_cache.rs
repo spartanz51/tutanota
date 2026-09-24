@@ -4,12 +4,9 @@ use crate::tutanota_constants::ArchiveDataType;
 use crate::GeneratedId;
 use std::collections::HashMap;
 use std::future::Future;
+use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 
-/// still missing ReadArchive(archive_id) and ReadBlob(archive_id, blob_id)
-/// (see TS impl of the cache)
-/// once we have those, it should be made even more type safe by restricting the input to
-/// reading/writing functions on blob facade to the right kind of token.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(test, derive(Debug))]
 pub(crate) struct BlobWriteTokenKey(String, ArchiveDataType);
@@ -20,12 +17,12 @@ impl BlobWriteTokenKey {
 	}
 }
 
-pub(super) struct BlobAccessTokenCache {
-	cache: RwLock<HashMap<BlobWriteTokenKey, BlobServerAccessInfo>>,
+pub(super) struct BlobAccessTokenCache<K = BlobWriteTokenKey> {
+	cache: RwLock<HashMap<K, BlobServerAccessInfo>>,
 	date_provider: Arc<dyn DateProvider>,
 }
 
-impl BlobAccessTokenCache {
+impl<K: Clone + Eq + Hash> BlobAccessTokenCache<K> {
 	pub fn new(date_provider: Arc<dyn DateProvider>) -> Self {
 		Self {
 			cache: RwLock::default(),
@@ -35,7 +32,7 @@ impl BlobAccessTokenCache {
 
 	pub async fn try_get_token<F, E, Loader>(
 		&self,
-		key: &BlobWriteTokenKey,
+		key: &K,
 		loader: Loader,
 	) -> Result<BlobServerAccessInfo, E>
 	where
@@ -56,14 +53,14 @@ impl BlobAccessTokenCache {
 		Ok(loaded)
 	}
 
-	fn insert(&self, key: BlobWriteTokenKey, value: BlobServerAccessInfo) {
+	fn insert(&self, key: K, value: BlobServerAccessInfo) {
 		let mut cache = self.cache.write().expect("poisoned lock");
 		// someone else might have inserted something while we were loading.
 		// we're just replacing + dropping that value.
 		let _previous = cache.insert(key, value);
 	}
 
-	pub fn evict(&self, key: &BlobWriteTokenKey) {
+	pub fn evict(&self, key: &K) {
 		let mut cache = self.cache.write().expect("poisoned lock");
 		cache.remove(key);
 	}
