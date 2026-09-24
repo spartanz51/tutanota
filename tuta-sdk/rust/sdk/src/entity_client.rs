@@ -1,4 +1,6 @@
-use crate::bindings::rest_client::{HttpMethod, RestClient, RestClientOptions, RestResponse};
+use crate::bindings::rest_client::{
+	encode_query_params, HttpMethod, RestClient, RestClientOptions, RestResponse,
+};
 use crate::bindings::suspendable_rest_client::SuspensionBehavior;
 use crate::element_value::{ElementValue, ParsedEntity};
 use crate::entities::entity_facade::{ID_FIELD, PERMISSIONS_FIELD};
@@ -16,6 +18,9 @@ use crate::util::extract_parsed_entity_id;
 use crate::GeneratedId;
 use crate::{ApiCallError, CustomId, HeadersProvider, ListLoadDirection, TypeRef};
 use std::sync::Arc;
+
+/// Maximum number of element ids per `load_multiple` request, as in TS.
+const LOAD_MULTIPLE_LIMIT: usize = 100;
 
 /// A high level interface to manipulate unencrypted entities/instances via the REST API
 pub struct EntityClient {
@@ -198,6 +203,54 @@ impl EntityClient {
 			.map(|e| self.json_serializer.parse(type_ref, e))
 			.collect::<Result<Vec<_>, _>>()?;
 		Ok(parsed_entities)
+	}
+
+	/// Loads the list elements with the given ids, `LOAD_MULTIPLE_LIMIT` per
+	/// request. As in TS `EntityRestClient.loadMultiple`, elements the server
+	/// does not return are omitted, in the server's order.
+	pub async fn load_multiple(
+		&self,
+		type_ref: &TypeRef,
+		list_id: &GeneratedId,
+		element_ids: &[GeneratedId],
+	) -> Result<Vec<ParsedEntity>, ApiCallError> {
+		let type_model = self
+			.type_model_provider
+			.resolve_server_type_ref(type_ref)
+			.ok_or_else(|| TypeNotFound {
+				type_ref: type_ref.clone(),
+			})?;
+		if type_model.element_type != ElementType::ListElement {
+			return Err(ApiCallError::internal(
+				"load_multiple requires a list element type".to_owned(),
+			));
+		}
+		let mut entities = Vec::with_capacity(element_ids.len());
+		for chunk in element_ids.chunks(LOAD_MULTIPLE_LIMIT) {
+			let ids = chunk
+				.iter()
+				.map(GeneratedId::as_str)
+				.collect::<Vec<_>>()
+				.join(",");
+			let url = format!(
+				"{}/rest/{}/{}/{}{}",
+				self.base_url,
+				type_ref.app,
+				type_model.name,
+				list_id,
+				encode_query_params([("ids", ids)])
+			);
+			let response_bytes = self
+				.prepare_and_fire(type_ref, url)
+				.await?
+				.ok_or_else(|| ApiCallError::internal("no body".to_owned()))?;
+			let response_entities = serde_json::from_slice::<Vec<RawEntity>>(&response_bytes)
+				.map_err(|e| ApiCallError::internal_with_err(e, "invalid response"))?;
+			for entity in response_entities {
+				entities.push(self.json_serializer.parse(type_ref, entity)?);
+			}
+		}
+		Ok(entities)
 	}
 
 	#[allow(clippy::unused_async, unused)]
@@ -447,6 +500,12 @@ mockall::mock! {
 			count: usize,
 			list_load_direction: ListLoadDirection,
 		) -> Result<Vec<ParsedEntity>, ApiCallError>;
+		pub async fn load_multiple(
+			&self,
+			type_ref: &TypeRef,
+			list_id: &GeneratedId,
+			element_ids: &[GeneratedId],
+		) -> Result<Vec<ParsedEntity>, ApiCallError>;
 		pub async fn setup_element(&self, type_ref: &TypeRef, entity: RawEntity) -> Vec<String>;
 		pub async fn setup_list_element(
 			&self,
@@ -570,6 +629,94 @@ mod stests {
 			.await
 			.expect("success");
 		assert_eq!(result_entity, vec![entity_map]);
+	}
+
+	fn load_multiple_client(rest_client: MockRestClient) -> EntityClient {
+		let type_provider = Arc::new(mock_type_model_provider());
+		EntityClient::new(
+			Arc::new(rest_client),
+			Arc::new(JsonSerializer::new(type_provider.clone())),
+			"http://test.com".to_owned(),
+			Arc::new(HeadersProvider::new(Some("123".to_owned()))),
+			type_provider,
+		)
+	}
+
+	#[tokio::test]
+	async fn test_load_multiple_returns_the_elements_the_server_has() {
+		let mut rest_client = MockRestClient::new();
+		let url = "http://test.com/rest/entityclienttestapp/TestListGeneratedElementIdEntity/list_id?ids=first%2Cmissing";
+		rest_client
+			.expect_request_binary()
+			.with(eq(url.to_owned()), eq(HttpMethod::GET), always())
+			.return_once(|_, _, _| {
+				Ok(RestResponse {
+					status: 200,
+					headers: server_types_hash_header(),
+					body: Some(br#"[{"101":["list_id","first"],"102":"AQID"}]"#.to_vec()),
+				})
+			});
+
+		let result = load_multiple_client(rest_client)
+			.load_multiple(
+				&TestListGeneratedElementIdEntity::type_ref(),
+				&GeneratedId("list_id".to_owned()),
+				&[
+					GeneratedId("first".to_owned()),
+					GeneratedId("missing".to_owned()),
+				],
+			)
+			.await
+			.expect("success");
+		assert_eq!(result.len(), 1);
+		assert_eq!(result[0]["102"], ElementValue::Bytes(vec![1, 2, 3]));
+	}
+
+	#[tokio::test]
+	async fn test_load_multiple_sends_at_most_100_ids_per_request() {
+		let mut rest_client = MockRestClient::new();
+		let mut sequence = mockall::Sequence::new();
+		for count in [100, 1] {
+			rest_client
+				.expect_request_binary()
+				.times(1)
+				.in_sequence(&mut sequence)
+				.withf(move |url, _, _| url.split("%2C").count() == count)
+				.returning(|_, _, _| {
+					Ok(RestResponse {
+						status: 200,
+						headers: server_types_hash_header(),
+						body: Some(b"[]".to_vec()),
+					})
+				});
+		}
+		let ids: Vec<GeneratedId> = (0..101).map(|i| GeneratedId(format!("id{i}"))).collect();
+
+		let result = load_multiple_client(rest_client)
+			.load_multiple(
+				&TestListGeneratedElementIdEntity::type_ref(),
+				&GeneratedId("list_id".to_owned()),
+				&ids,
+			)
+			.await
+			.expect("success");
+		assert!(result.is_empty());
+	}
+
+	#[tokio::test]
+	async fn test_load_multiple_without_ids_sends_no_request() {
+		let mut rest_client = MockRestClient::new();
+		rest_client.expect_request_binary().times(0);
+
+		let result = load_multiple_client(rest_client)
+			.load_multiple(
+				&TestListGeneratedElementIdEntity::type_ref(),
+				&GeneratedId("list_id".to_owned()),
+				&[],
+			)
+			.await
+			.expect("success");
+		assert!(result.is_empty());
 	}
 
 	#[tokio::test]
