@@ -6,6 +6,7 @@ use crate::crypto::asymmetric_crypto_facade::AsymmetricCryptoError;
 use crate::crypto::asymmetric_crypto_facade::AsymmetricCryptoFacade;
 #[cfg_attr(test, mockall_double::double)]
 use crate::crypto::crypto_facade::CryptoFacade;
+use crate::crypto::crypto_facade::ResolvedSessionKey;
 use crate::crypto::key::AsymmetricKeyPair;
 use crate::crypto::public_key_provider::{PublicKeyIdentifier, PublicKeyLoadingError};
 use crate::crypto::X25519PublicKey;
@@ -280,26 +281,8 @@ impl CryptoEntityClient {
 
 		match possible_session_key {
 			Some(session_key) => {
-				let sender_identity_pub_key = session_key.sender_identity_pub_key.clone();
-				let mut decrypted_entity =
-					self.entity_facade
-						.decrypt_and_map(type_model, parsed_entity, session_key)?;
-
-				if let Some(auth_status) = self
-					.get_encryption_auth_status_or_none(
-						type_model,
-						&mut decrypted_entity,
-						sender_identity_pub_key,
-					)
-					.await?
-				{
-					let encryption_auth_status_id =
-						type_model.get_attribute_id_by_attribute_name("encryptionAuthStatus")?;
-					decrypted_entity
-						.insert(encryption_auth_status_id, ElementValue::Number(auth_status));
-				}
-
-				Ok(decrypted_entity)
+				self.decrypt_with_session_key(type_model, parsed_entity, session_key)
+					.await
 			},
 			// `resolve_session_key()` only returns none if the entity is unencrypted, so
 			// no need to handle it
@@ -307,6 +290,59 @@ impl CryptoEntityClient {
 				unreachable!()
 			},
 		}
+	}
+
+	/// Decrypts an already parsed entity. Blob elements and draft details have no
+	/// owner-encrypted session key of their own: pass the one resolved from the
+	/// owning instance, as TS does with `keyProviderFromInstance`. Without it the
+	/// session key is resolved from the entity itself.
+	pub async fn decrypt_parsed(
+		&self,
+		type_ref: &TypeRef,
+		parsed_entity: ParsedEntity,
+		inherited_session_key: Option<ResolvedSessionKey>,
+	) -> Result<ParsedEntity, ApiCallError> {
+		let type_model = self.entity_client.resolve_server_type_ref(type_ref)?;
+		if !type_model.marked_encrypted() {
+			return Ok(parsed_entity);
+		}
+		match inherited_session_key {
+			Some(session_key) => {
+				self.decrypt_with_session_key(&type_model, parsed_entity, session_key)
+					.await
+			},
+			None => {
+				self.process_encrypted_entity(&type_model, parsed_entity)
+					.await
+			},
+		}
+	}
+
+	async fn decrypt_with_session_key(
+		&self,
+		type_model: &TypeModel,
+		parsed_entity: ParsedEntity,
+		session_key: ResolvedSessionKey,
+	) -> Result<ParsedEntity, ApiCallError> {
+		let sender_identity_pub_key = session_key.sender_identity_pub_key.clone();
+		let mut decrypted_entity =
+			self.entity_facade
+				.decrypt_and_map(type_model, parsed_entity, session_key)?;
+
+		if let Some(auth_status) = self
+			.get_encryption_auth_status_or_none(
+				type_model,
+				&mut decrypted_entity,
+				sender_identity_pub_key,
+			)
+			.await?
+		{
+			let encryption_auth_status_id =
+				type_model.get_attribute_id_by_attribute_name("encryptionAuthStatus")?;
+			decrypted_entity.insert(encryption_auth_status_id, ElementValue::Number(auth_status));
+		}
+
+		Ok(decrypted_entity)
 	}
 
 	/// Tries authenticating the given decrypted typed_entity against the provided sender_identity_pub_key
@@ -505,7 +541,7 @@ mod tests {
 	use crate::date::DateTime;
 	use crate::entities::entity_facade::{EntityFacadeImpl, MockEntityFacade, ID_FIELD};
 	use crate::entities::generated::sys::{AccountingInfo, BucketKey};
-	use crate::entities::generated::tutanota::Mail;
+	use crate::entities::generated::tutanota::{Mail, MailSetEntry};
 	use crate::entities::Entity;
 	use crate::entity_client::MockEntityClient;
 	use crate::instance_mapper::InstanceMapper;
@@ -730,6 +766,162 @@ mod tests {
 			result.firstRecipient.clone().unwrap().address
 		);
 		assert_eq!(None, result.encryptionAuthStatus); // no bucket_key - no auth
+	}
+
+	#[tokio::test]
+	async fn decrypt_parsed_uses_the_inherited_session_key() {
+		let sk = GenericAesKey::Aes256(Aes256Key::from_bytes(&random::<[u8; 32]>()).unwrap());
+		let iv = InitializationVector::from_bytes(&random::<[u8; 16]>()).unwrap();
+		let (encrypted_mail, ..) = generate_email_entity(
+			&sk,
+			&iv,
+			false,
+			"Subject".to_owned(),
+			"Sender".to_owned(),
+			"Recipient".to_owned(),
+			None,
+		);
+		let type_model_provider: &'static TypeModelProvider = leak(TypeModelProvider::new_test(
+			Arc::new(MockRestClient::new()),
+			Arc::new(MockFileClient::new()),
+			"http://localhost:9000".to_string(),
+		));
+		let mail_type_model = type_model_provider
+			.resolve_server_type_ref(&Mail::type_ref())
+			.expect("Error in type_model_provider");
+		let mut mock_entity_client = MockEntityClient::default();
+		mock_entity_client
+			.expect_resolve_server_type_ref()
+			.returning(move |_| Ok(mail_type_model.clone()));
+		// The inherited key is used as is: nothing is resolved from the entity.
+		let mut mock_crypto_facade = MockCryptoFacade::default();
+		mock_crypto_facade.expect_resolve_session_key().times(0);
+		let type_model_provider = Arc::new(mock_type_model_provider());
+		let crypto_entity_client = CryptoEntityClient::new(
+			Arc::new(mock_entity_client),
+			Arc::new(EntityFacadeImpl::new(
+				Arc::clone(&type_model_provider),
+				RandomizerFacade::from_core(rand_core::OsRng),
+			)),
+			Arc::new(mock_crypto_facade),
+			Arc::new(InstanceMapper::new(type_model_provider.clone())),
+			Arc::new(MockAsymmetricCryptoFacade::default()),
+			Arc::new(MockKeyLoaderFacade::default()),
+		);
+
+		let decrypted = crypto_entity_client
+			.decrypt_parsed(
+				&Mail::type_ref(),
+				encrypted_mail,
+				Some(ResolvedSessionKey {
+					session_key: sk,
+					owner_enc_session_key: vec![1, 2, 3],
+					owner_key_version: 0u64,
+					sender_identity_pub_key: None,
+				}),
+			)
+			.await
+			.unwrap();
+
+		let mail: Mail = InstanceMapper::new(type_model_provider)
+			.parse_entity(decrypted)
+			.unwrap();
+		assert_eq!("Subject", mail.subject);
+	}
+
+	#[tokio::test]
+	async fn decrypt_parsed_without_a_key_resolves_it_from_the_entity() {
+		let sk = GenericAesKey::Aes256(Aes256Key::from_bytes(&random::<[u8; 32]>()).unwrap());
+		let iv = InitializationVector::from_bytes(&random::<[u8; 16]>()).unwrap();
+		let (encrypted_mail, ..) = generate_email_entity(
+			&sk,
+			&iv,
+			false,
+			"Subject".to_owned(),
+			"Sender".to_owned(),
+			"Recipient".to_owned(),
+			None,
+		);
+		let type_model_provider: &'static TypeModelProvider = leak(TypeModelProvider::new_test(
+			Arc::new(MockRestClient::new()),
+			Arc::new(MockFileClient::new()),
+			"http://localhost:9000".to_string(),
+		));
+		let mail_type_model = type_model_provider
+			.resolve_server_type_ref(&Mail::type_ref())
+			.expect("Error in type_model_provider");
+		let mut mock_entity_client = MockEntityClient::default();
+		mock_entity_client
+			.expect_resolve_server_type_ref()
+			.returning(move |_| Ok(mail_type_model.clone()));
+		let mut mock_crypto_facade = MockCryptoFacade::default();
+		mock_crypto_facade
+			.expect_resolve_session_key()
+			.times(1)
+			.returning(move |_, _| {
+				Ok(Some(ResolvedSessionKey {
+					session_key: sk.clone(),
+					owner_enc_session_key: vec![1, 2, 3],
+					owner_key_version: 0u64,
+					sender_identity_pub_key: None,
+				}))
+			});
+		let type_model_provider = Arc::new(mock_type_model_provider());
+		let crypto_entity_client = CryptoEntityClient::new(
+			Arc::new(mock_entity_client),
+			Arc::new(EntityFacadeImpl::new(
+				Arc::clone(&type_model_provider),
+				RandomizerFacade::from_core(rand_core::OsRng),
+			)),
+			Arc::new(mock_crypto_facade),
+			Arc::new(InstanceMapper::new(type_model_provider.clone())),
+			Arc::new(MockAsymmetricCryptoFacade::default()),
+			Arc::new(MockKeyLoaderFacade::default()),
+		);
+
+		let decrypted = crypto_entity_client
+			.decrypt_parsed(&Mail::type_ref(), encrypted_mail, None)
+			.await
+			.unwrap();
+
+		let mail: Mail = InstanceMapper::new(type_model_provider)
+			.parse_entity(decrypted)
+			.unwrap();
+		assert_eq!("Subject", mail.subject);
+	}
+
+	#[tokio::test]
+	async fn decrypt_parsed_returns_an_unencrypted_entity_unchanged() {
+		let type_model_provider: &'static TypeModelProvider = leak(TypeModelProvider::new_test(
+			Arc::new(MockRestClient::new()),
+			Arc::new(MockFileClient::new()),
+			"http://localhost:9000".to_string(),
+		));
+		let model = type_model_provider
+			.resolve_server_type_ref(&MailSetEntry::type_ref())
+			.expect("Error in type_model_provider");
+		let entity = create_test_entity_dict::<MailSetEntry>();
+		let mut mock_entity_client = MockEntityClient::default();
+		mock_entity_client
+			.expect_resolve_server_type_ref()
+			.returning(move |_| Ok(model.clone()));
+		let mut mock_crypto_facade = MockCryptoFacade::default();
+		mock_crypto_facade.expect_resolve_session_key().times(0);
+		let crypto_entity_client = CryptoEntityClient::new(
+			Arc::new(mock_entity_client),
+			Arc::new(MockEntityFacade::default()),
+			Arc::new(mock_crypto_facade),
+			Arc::new(InstanceMapper::new(Arc::new(mock_type_model_provider()))),
+			Arc::new(MockAsymmetricCryptoFacade::default()),
+			Arc::new(MockKeyLoaderFacade::default()),
+		);
+
+		let result = crypto_entity_client
+			.decrypt_parsed(&MailSetEntry::type_ref(), entity.clone(), None)
+			.await
+			.unwrap();
+
+		assert_eq!(result, entity);
 	}
 
 	#[tokio::test]
