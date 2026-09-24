@@ -48,6 +48,16 @@ impl EntityClient {
 		}
 	}
 
+	/// Parses a raw JSON entity with the server type model, as `load` does, for
+	/// payloads that arrive by another way (inline event bus data, blobs).
+	pub fn parse_raw(
+		&self,
+		type_ref: &TypeRef,
+		raw_entity: RawEntity,
+	) -> Result<ParsedEntity, ApiCallError> {
+		Ok(self.json_serializer.parse(type_ref, raw_entity)?)
+	}
+
 	#[allow(clippy::unused_async, unused)]
 	/// Gets an entity/instance of type `type_ref` from the backend
 	pub async fn load<Id: IdType>(
@@ -481,6 +491,7 @@ mockall::mock! {
 		pub fn get_type_model_provider() -> Arc<TypeModelProvider>;
 		pub fn resolve_client_type_ref<'a>(&'a self, type_ref: &TypeRef) -> Result<&'a TypeModel, ApiCallError>;
 		pub fn resolve_server_type_ref(&self, type_ref: &TypeRef) -> Result<Arc<TypeModel>, ApiCallError>;
+		pub fn parse_raw(&self, type_ref: &TypeRef, raw_entity: RawEntity) -> Result<ParsedEntity, ApiCallError>;
 		pub async fn load<Id: IdType>(
 			&self,
 			type_ref: &TypeRef,
@@ -738,6 +749,17 @@ mod stests {
 			.await
 			.expect("success");
 		assert!(result.is_empty());
+	}
+
+	#[test]
+	fn test_parse_raw_uses_the_server_type_model() {
+		let raw: RawEntity =
+			serde_json::from_str(r#"{"101":["list_id","element_id"],"102":"AQID"}"#).unwrap();
+
+		let parsed = test_entity_client(MockRestClient::new())
+			.parse_raw(&TestListGeneratedElementIdEntity::type_ref(), raw)
+			.expect("success");
+		assert_eq!(parsed["102"], ElementValue::Bytes(vec![1, 2, 3]));
 	}
 
 	#[tokio::test]
