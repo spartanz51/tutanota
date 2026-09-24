@@ -130,6 +130,20 @@ impl CryptoEntityClient {
 		self.process_server_response(parsed_entities).await
 	}
 
+	/// Loads and decrypts the list elements with the given ids; see
+	/// `EntityClient::load_multiple`.
+	pub async fn load_multiple<T: Entity + DeserializeOwned>(
+		&self,
+		list_id: &GeneratedId,
+		element_ids: &[GeneratedId],
+	) -> Result<Vec<T>, ApiCallError> {
+		let parsed_entities = self
+			.entity_client
+			.load_multiple(&T::type_ref(), list_id, element_ids)
+			.await?;
+		self.process_server_response(parsed_entities).await
+	}
+
 	pub fn serialize_entity<Instance: Entity + Serialize>(
 		&self,
 		instance: Instance,
@@ -535,6 +549,85 @@ mod tests {
 
 		assert_eq!(Ok(None), auth_status_result);
 		assert_eq!(accounting_info, accounting_info_input);
+	}
+
+	#[tokio::test]
+	async fn load_multiple_decrypts_every_returned_element() {
+		let sk = GenericAesKey::Aes256(Aes256Key::from_bytes(&random::<[u8; 32]>()).unwrap());
+		let iv = InitializationVector::from_bytes(&random::<[u8; 16]>()).unwrap();
+		let mails: Vec<_> = ["First", "Second"]
+			.into_iter()
+			.map(|subject| {
+				generate_email_entity(
+					&sk,
+					&iv,
+					false,
+					subject.to_owned(),
+					"Sender".to_owned(),
+					"Recipient".to_owned(),
+					None,
+				)
+				.0
+			})
+			.collect();
+		let type_model_provider: &'static TypeModelProvider = leak(TypeModelProvider::new_test(
+			Arc::new(MockRestClient::new()),
+			Arc::new(MockFileClient::new()),
+			"http://localhost:9000".to_string(),
+		));
+		let mail_type_model = type_model_provider
+			.resolve_server_type_ref(&Mail::type_ref())
+			.expect("Error in type_model_provider");
+		let ids = vec![
+			GeneratedId("first".to_owned()),
+			GeneratedId("second".to_owned()),
+		];
+		let requested = ids.clone();
+		let mut mock_entity_client = MockEntityClient::default();
+		mock_entity_client
+			.expect_resolve_server_type_ref()
+			.returning(move |_| Ok(mail_type_model.clone()));
+		mock_entity_client
+			.expect_load_multiple()
+			.withf(move |type_ref, list_id, element_ids| {
+				*type_ref == Mail::type_ref()
+					&& list_id.as_str() == "list"
+					&& element_ids == requested
+			})
+			.times(1)
+			.returning(move |_, _, _| Ok(mails.clone()));
+		let mut mock_crypto_facade = MockCryptoFacade::default();
+		mock_crypto_facade
+			.expect_resolve_session_key()
+			.times(2)
+			.returning(move |_, _| {
+				Ok(Some(ResolvedSessionKey {
+					session_key: sk.clone(),
+					owner_enc_session_key: vec![1, 2, 3],
+					owner_key_version: 0u64,
+					sender_identity_pub_key: None,
+				}))
+			});
+		let type_model_provider = Arc::new(mock_type_model_provider());
+		let crypto_entity_client = CryptoEntityClient::new(
+			Arc::new(mock_entity_client),
+			Arc::new(EntityFacadeImpl::new(
+				Arc::clone(&type_model_provider),
+				RandomizerFacade::from_core(rand_core::OsRng),
+			)),
+			Arc::new(mock_crypto_facade),
+			Arc::new(InstanceMapper::new(type_model_provider.clone())),
+			Arc::new(MockAsymmetricCryptoFacade::default()),
+			Arc::new(MockKeyLoaderFacade::default()),
+		);
+
+		let loaded: Vec<Mail> = crypto_entity_client
+			.load_multiple(&GeneratedId("list".to_owned()), &ids)
+			.await
+			.unwrap();
+
+		let subjects: Vec<&str> = loaded.iter().map(|mail| mail.subject.as_str()).collect();
+		assert_eq!(subjects, ["First", "Second"]);
 	}
 
 	#[tokio::test]
