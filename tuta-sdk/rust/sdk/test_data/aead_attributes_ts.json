@@ -12,5 +12,21 @@
 		"key": "ERERERERERERERERERERERERERERERERERERERERERE=",
 		"ciphertext": "A/wwsRFB4n0uhzYIjgSTARuk4MCL4g4XbbcGQnCqjsQQEnkKklZRKlhKcbJpWYMh3hDAsaZuNao/RHcRyC6DK6jiT9IZys8+DWYr9F4=",
 		"plaintext": "AEAD diagnostic: été ✓"
+	},
+	{
+		"version": 2,
+		"path": "105",
+		"key": "ERERERERERERERERERERERERERERERERERERERERERE=",
+		"kdf_nonce": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
+		"ciphertext": "AgAHOD8cIubtzCk2+NiyfiDpiEn1rzmW6KWPGvYXs4zqAzisewk0lDRwVuVSApCZuSCctUC9QmJzmsaXFbigKBXcFxAHxXjekSMew+vb4A==",
+		"plaintext": "AEAD diagnostic: été ✓"
+	},
+	{
+		"version": 2,
+		"path": "3/aggregateId/9/anotherCustomId/17",
+		"key": "ERERERERERERERERERERERERERERERERERERERERERE=",
+		"kdf_nonce": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
+		"ciphertext": "AgAHJ2fTExf6sFytn7JDpY4w0SAVPxBIBGsScsYOeWoBqRCiHreRcJLEbb7+T/+mGJ3dV7/xFPcoHBGe/790JEFNP7ilpvSlgZdjtF6wCw==",
+		"plaintext": "AEAD diagnostic: été ✓"
 	}
 ]
