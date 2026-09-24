@@ -1,3 +1,6 @@
+mod decryption;
+use decryption::InstanceDecryptor;
+
 use crate::crypto::crypto_facade::ResolvedSessionKey;
 use crate::date::DateTime;
 use crate::element_value::{ElementValue, ParsedEntity};
@@ -256,7 +259,8 @@ impl EntityFacadeImpl {
 		&self,
 		type_model: &TypeModel,
 		mut entity: ParsedEntity,
-		session_key: &GenericAesKey,
+		decryptor: &InstanceDecryptor<'_>,
+		field_path_prefix: Option<&str>,
 	) -> Result<ParsedEntity, ApiCallError> {
 		let mut mapped_decrypted: ParsedEntity = Default::default();
 		let mut mapped_errors: Errors = Default::default();
@@ -267,8 +271,14 @@ impl EntityFacadeImpl {
 			let stored_element = entity
 				.remove(&value_id_string)
 				.unwrap_or(ElementValue::Null);
-			let MappedValue { value, error } =
-				Self::decrypt_and_parse_value(stored_element, session_key, value_name, value_type)?;
+			let field_path = field_path_prefix.map(|prefix| format!("{prefix}{value_id_string}"));
+			let MappedValue { value, error } = Self::decrypt_and_parse_value(
+				stored_element,
+				decryptor,
+				value_name,
+				value_type,
+				field_path.as_deref(),
+			)?;
 
 			mapped_decrypted.insert(value_id_string.clone(), value);
 			if let Some(error) = error {
@@ -285,7 +295,8 @@ impl EntityFacadeImpl {
 			let (mapped_association, errors) = self.map_associations(
 				type_model,
 				association_entry,
-				session_key,
+				decryptor,
+				field_path_prefix,
 				association_name,
 				association_type,
 			)?;
@@ -311,7 +322,8 @@ impl EntityFacadeImpl {
 		&self,
 		type_model: &TypeModel,
 		association_data: ElementValue,
-		session_key: &GenericAesKey,
+		decryptor: &InstanceDecryptor<'_>,
+		field_path_prefix: Option<&str>,
 		association_name: &str,
 		association_model: &ModelAssociation,
 	) -> Result<(ElementValue, Errors), ApiCallError> {
@@ -337,8 +349,25 @@ impl EntityFacadeImpl {
 			for (index, aggregate) in association_data.into_iter().enumerate() {
 				match aggregate {
 					ElementValue::Dict(entity) => {
-						let mut decrypted_aggregate =
-							self.decrypt_and_map_inner(&aggregate_type_model, entity, session_key)?;
+						let aggregate_id = aggregate_type_model
+							.get_attribute_id_by_attribute_name(ID_FIELD)
+							.ok()
+							.and_then(|id| entity.get(&id))
+							.and_then(|value| match value {
+								ElementValue::String(id) => Some(id.as_str()),
+								ElementValue::IdCustomId(id) => Some(id.0.as_str()),
+								ElementValue::IdGeneratedId(id) => Some(id.0.as_str()),
+								_ => None,
+							});
+						let prefix = field_path_prefix.zip(aggregate_id).map(|(prefix, id)| {
+							format!("{prefix}{}/{id}/", String::from(association_model.id))
+						});
+						let mut decrypted_aggregate = self.decrypt_and_map_inner(
+							&aggregate_type_model,
+							entity,
+							decryptor,
+							prefix.as_deref(),
+						)?;
 
 						// Errors should be grouped inside the top-most object, so they should be
 						// extracted and removed from aggregates
@@ -379,9 +408,10 @@ impl EntityFacadeImpl {
 	}
 	fn decrypt_and_parse_value(
 		value: ElementValue,
-		session_key: &GenericAesKey,
+		decryptor: &InstanceDecryptor<'_>,
 		key: &str,
 		model_value: &ModelValue,
+		field_path: Option<&str>,
 	) -> Result<MappedValue, ApiCallError> {
 		match (&model_value.cardinality, &model_value.encrypted, value) {
 			(Cardinality::One, true, value) if value.eq(&ElementValue::String(String::new())) => {
@@ -398,11 +428,7 @@ impl EntityFacadeImpl {
 			},
 			(Cardinality::One | Cardinality::ZeroOrOne, true, ElementValue::Bytes(bytes)) => {
 				// If it's a proper encrypted value, then we need to decrypt it and parse it.
-				let plaintext = session_key.decrypt_data(bytes.as_slice()).map_err(|e| {
-					ApiCallError::InternalSdkError {
-						error_message: e.to_string(),
-					}
-				})?;
+				let plaintext = decryptor.decrypt(&bytes, field_path)?;
 
 				match Self::parse_decrypted_value(model_value.value_type.clone(), plaintext) {
 					Ok(value) => Ok(MappedValue { value, error: None }),
@@ -530,8 +556,13 @@ impl EntityFacade for EntityFacadeImpl {
 		entity: ParsedEntity,
 		resolved_session_key: ResolvedSessionKey,
 	) -> Result<ParsedEntity, ApiCallError> {
+		let decryptor = InstanceDecryptor::new(
+			&resolved_session_key.session_key,
+			format!("{}/{}", type_model.app, String::from(type_model.id)),
+			self.randomizer_facade.clone(),
+		);
 		let mut mapped_decrypted =
-			self.decrypt_and_map_inner(type_model, entity, &resolved_session_key.session_key)?;
+			self.decrypt_and_map_inner(type_model, entity, &decryptor, Some(""))?;
 
 		let owner_enc_session_key_attribute_id: String = type_model
             .get_attribute_id_by_attribute_name(OWNER_ENC_SESSION_KEY_FIELD)
@@ -659,6 +690,7 @@ mod lz4_compressed_string_compatibility_tests {
 
 #[cfg(test)]
 mod tests {
+	use super::decryption::InstanceDecryptor;
 	use crate::bindings::file_client::MockFileClient;
 	use crate::bindings::rest_client::MockRestClient;
 	use crate::crypto::crypto_facade::ResolvedSessionKey;
@@ -757,9 +789,14 @@ mod tests {
 		let decrypt_model_value = create_model_value(ValueType::Date, true, Cardinality::One);
 		let decrypted_value = EntityFacadeImpl::decrypt_and_parse_value(
 			encrypted_value,
-			&sk,
+			&InstanceDecryptor::new(
+				&sk,
+				"test/0".into(),
+				RandomizerFacade::from_core(rand_core::OsRng),
+			),
 			"test",
 			&decrypt_model_value,
+			Some("0"),
 		);
 
 		assert!(decrypted_value.is_ok());
@@ -898,8 +935,17 @@ mod tests {
 		let encrypted_value =
 			EntityFacadeImpl::encrypt_value(&model_value, &value, &sk, iv.clone()).unwrap();
 
-		let decrypted_value =
-			EntityFacadeImpl::decrypt_and_parse_value(encrypted_value, &sk, "test", &model_value);
+		let decrypted_value = EntityFacadeImpl::decrypt_and_parse_value(
+			encrypted_value,
+			&InstanceDecryptor::new(
+				&sk,
+				"test/0".into(),
+				RandomizerFacade::from_core(rand_core::OsRng),
+			),
+			"test",
+			&model_value,
+			Some("0"),
+		);
 
 		assert_eq!(
 			Ok(MappedValue {
@@ -914,9 +960,14 @@ mod tests {
 	fn decrypt_empty_compressed_string() {
 		let decrypted_value = EntityFacadeImpl::decrypt_and_parse_value(
 			ElementValue::String(String::default()),
-			&GenericAesKey::from_bytes(&KNOWN_SK).unwrap(),
+			&InstanceDecryptor::new(
+				&GenericAesKey::from_bytes(&KNOWN_SK).unwrap(),
+				"test/0".into(),
+				RandomizerFacade::from_core(rand_core::OsRng),
+			),
 			"test",
 			&create_model_value(ValueType::CompressedString, true, Cardinality::One),
+			Some("0"),
 		)
 		.map(|a| a.value);
 
@@ -1546,5 +1597,60 @@ mod tests {
 			is_final: true,
 			encrypted,
 		}
+	}
+	#[test]
+	fn aead_aggregate_authenticates_root_type_field_path_and_aggregate_id() {
+		use crypto_primitives::aead_facade::{AeadFacade, AeadSubKeys};
+		let provider = Arc::new(TypeModelProvider::new_test(
+			Arc::new(MockRestClient::new()),
+			Arc::new(MockFileClient::new()),
+			"localhost".into(),
+		));
+		let serializer = JsonSerializer::new(provider.clone());
+		let mut entity = serializer
+			.parse(&Mail::type_ref(), make_mail_raw_entity())
+			.unwrap();
+		let model = provider.resolve_server_type_ref(&Mail::type_ref()).unwrap();
+		let key = Aes256Key::from_bytes(&KNOWN_SK).unwrap();
+		let subkeys = AeadSubKeys::derive_from_session_key(&key, "tutanota/97");
+		let aead = AeadFacade::new(RandomizerFacade::from_core(rand_core::OsRng));
+		let sender = entity.get_mut("111").unwrap().assert_array_mut_ref()[0].assert_dict_mut_ref();
+		// Mail.sender (111) is a MailAddress aggregate: _id (93), name (94).
+		sender.insert("93".into(), ElementValue::String("sender-id".into()));
+		sender.insert(
+			"94".into(),
+			ElementValue::Bytes(
+				aead.encrypt(
+					&subkeys,
+					b"Alice".to_vec(),
+					b"attributeEncSK\x1f111/sender-id/94",
+				)
+				.unwrap(),
+			),
+		);
+		let keys = ResolvedSessionKey {
+			session_key: GenericAesKey::Aes256(key),
+			owner_enc_session_key: vec![],
+			owner_key_version: 0,
+			sender_identity_pub_key: None,
+		};
+		let decoder =
+			EntityFacadeImpl::new(provider, RandomizerFacade::from_core(rand_core::OsRng));
+		let result = decoder
+			.decrypt_and_map(&model, entity.clone(), keys.clone())
+			.unwrap();
+		assert_eq!(
+			result["111"].assert_array_ref()[0].assert_dict_ref()["94"],
+			ElementValue::String("Alice".into())
+		);
+		let sender = entity.get_mut("111").unwrap().assert_array_mut_ref()[0].assert_dict_mut_ref();
+		sender.insert("93".into(), ElementValue::String("moved".into()));
+		assert!(decoder
+			.decrypt_and_map(&model, entity.clone(), keys.clone())
+			.is_err());
+		entity.get_mut("111").unwrap().assert_array_mut_ref()[0]
+			.assert_dict_mut_ref()
+			.remove("93");
+		assert!(decoder.decrypt_and_map(&model, entity, keys).is_err());
 	}
 }
