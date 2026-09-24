@@ -335,6 +335,9 @@ impl Sdk {
 		mail_address: &str,
 		passphrase: &str,
 	) -> Result<Arc<LoggedInSdk>, LoginError> {
+		// The salt and the session are keyed by the normalized address, as in
+		// the TS LoginFacade; the credentials keep the address as entered.
+		let normalized_mail_address = mail_address.trim().to_lowercase();
 		let headers_provider = Arc::new(HeadersProvider::new(None));
 		let entity_facade = Arc::new(EntityFacadeImpl::new(
 			self.type_model_provider.clone(),
@@ -353,7 +356,7 @@ impl Sdk {
 		);
 		let salt_get_input: SaltData = SaltData {
 			_format: 0,
-			mailAddress: mail_address.to_string(),
+			mailAddress: normalized_mail_address.clone(),
 		};
 		let salt_return = service_executor
 			.get::<SaltService>(salt_get_input, ExtraServiceParams::default())
@@ -375,7 +378,7 @@ impl Sdk {
 			authToken: None,
 			authVerifier: Some(auth_verifier),
 			clientIdentifier: "Linux Desktop".to_string(),
-			mailAddress: Some(mail_address.to_string()),
+			mailAddress: Some(normalized_mail_address),
 			recoverCodeVerifier: None,
 			user: None,
 		};
