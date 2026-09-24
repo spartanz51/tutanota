@@ -20,6 +20,7 @@ use std::sync::Arc;
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(test, derive(Debug))]
 pub(crate) enum ReadTokenKey {
+	Archive(GeneratedId),
 	Instance {
 		archive: GeneratedId,
 		list: GeneratedId,
@@ -102,6 +103,7 @@ impl BlobAccessTokenFacade {
 					))
 				};
 				let (archive, instance, data_type) = match key {
+					ReadTokenKey::Archive(archive) => (archive, None, None),
 					ReadTokenKey::Instance {
 						archive,
 						list,
