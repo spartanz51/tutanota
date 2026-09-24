@@ -108,3 +108,18 @@ async fn create_session_uses_the_normalized_address() {
 	assert!(requests[1].1.contains("map-free@tutanota.de"));
 	assert!(!requests[1].1.contains("Map-Free"));
 }
+
+#[tokio::test]
+async fn create_session_refuses_a_bcrypt_account_without_creating_a_session() {
+	let server = SaltServer::new("0");
+
+	let result = sdk_with(server.clone())
+		.create_session("map-free@tutanota.de", "map")
+		.await;
+
+	assert!(result.is_err());
+	assert!(!server
+		.requests()
+		.iter()
+		.any(|(url, _)| url.contains("/sessionservice")));
+}
