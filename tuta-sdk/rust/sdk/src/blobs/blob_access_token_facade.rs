@@ -20,6 +20,7 @@ use std::sync::Arc;
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(test, derive(Debug))]
 pub(crate) enum ReadTokenKey {
+	Archive(GeneratedId),
 	Instance {
 		archive: GeneratedId,
 		list: GeneratedId,
@@ -101,26 +102,37 @@ impl BlobAccessTokenFacade {
 							.encode(self.randomizer_facade.generate_random_array::<4>()),
 					))
 				};
-				let ReadTokenKey::Instance {
-					archive,
-					list,
-					element,
-					data_type,
-				} = key;
+				let (archive, instance, data_type) = match key {
+					ReadTokenKey::Archive(archive) => (archive, None, None),
+					ReadTokenKey::Instance {
+						archive,
+						list,
+						element,
+						data_type,
+					} => (
+						archive,
+						Some((list, element)),
+						Some(data_type.discriminant()),
+					),
+				};
 				let read = BlobReadData {
 					_id: aggregate_id(),
 					archiveId: archive.clone(),
-					instanceListId: Some(list.clone()),
-					instanceIds: vec![InstanceId {
-						_id: aggregate_id(),
-						instanceId: Some(element.clone()),
-					}],
+					instanceListId: instance.map(|id| id.0.clone()),
+					instanceIds: instance
+						.map(|id| {
+							vec![InstanceId {
+								_id: aggregate_id(),
+								instanceId: Some(id.1.clone()),
+							}]
+						})
+						.unwrap_or_default(),
 				};
 				self.service_executor
 					.post::<BlobAccessTokenService>(
 						BlobAccessTokenPostIn {
 							_format: 0,
-							archiveDataType: Some(data_type.discriminant()),
+							archiveDataType: data_type,
 							read: Some(read),
 							write: None,
 						},
