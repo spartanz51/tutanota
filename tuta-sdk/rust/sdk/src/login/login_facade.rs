@@ -130,12 +130,12 @@ impl LoginFacade {
 				error_message: "Salt is missing from User!".to_string(),
 			});
 		};
-		Ok(derive_user_passphrase_key(
+		derive_user_passphrase_key(
 			KdfType::try_from(user.kdfVersion)?,
 			passphrase,
 			array_cast_slice(salt, "Vec")
 				.map_err(|e| ApiCallError::internal_with_err(e, "Invalid salt"))?,
-		))
+		)
 	}
 
 	/// Initialize a session with given user id and return a new UserFacade
@@ -206,10 +206,12 @@ pub fn derive_user_passphrase_key(
 	kdf_type: KdfType,
 	passphrase: &str,
 	salt: [u8; 16],
-) -> Aes256Key {
+) -> Result<Aes256Key, ApiCallError> {
 	match kdf_type {
-		KdfType::Argon2id => generate_key_from_passphrase(passphrase, salt),
-		KdfType::Bcrypt => panic!("BCrypt not implemented"),
+		KdfType::Argon2id => Ok(generate_key_from_passphrase(passphrase, salt)),
+		KdfType::Bcrypt => Err(ApiCallError::internal(
+			"Bcrypt passphrase keys are not implemented".to_owned(),
+		)),
 	}
 }
 
