@@ -1,3 +1,5 @@
+mod aead;
+
 use std::sync::Arc;
 
 use crate::bindings::rest_client::RestClientError;
@@ -11,7 +13,7 @@ use crate::crypto::key::AsymmetricKeyPair;
 use crate::crypto::public_key_provider::{PublicKeyIdentifier, PublicKeyLoadingError};
 use crate::crypto::X25519PublicKey;
 use crate::element_value::{ElementValue, ParsedEntity};
-use crate::entities::entity_facade::{EntityFacade, ID_FIELD};
+use crate::entities::entity_facade::{has_kdf_nonce, EntityFacade, ID_FIELD};
 use crate::entities::generated::base::PersistenceResourcePostReturn;
 use crate::entities::generated::sys::BucketKey;
 use crate::entities::generated::tutanota::{Mail, MailAddress};
@@ -191,6 +193,11 @@ impl CryptoEntityClient {
 			.map_err(|e| ApiCallError::internal_with_err(e, type_ref.to_string().as_str()))?;
 		let type_model = self.entity_client.resolve_client_type_ref(&type_ref)?;
 
+		if has_kdf_nonce(type_model, &parsed_entity) {
+			return Err(ApiCallError::internal(
+				"AEAD instance writes are not supported".into(),
+			));
+		}
 		let parsed_instance = if type_model.is_encrypted() {
 			let session_key = self
 				.crypto_facade
@@ -254,6 +261,11 @@ impl CryptoEntityClient {
 		type_model: &TypeModel,
 		parsed_entity: ParsedEntity,
 	) -> Result<ParsedEntity, ApiCallError> {
+		if has_kdf_nonce(type_model, &parsed_entity) {
+			return self
+				.process_entity_with_group_keys(type_model, parsed_entity, None)
+				.await;
+		}
 		let possible_session_key = self
 			.crypto_facade
 			.resolve_session_key(&parsed_entity, type_model)
@@ -303,6 +315,12 @@ impl CryptoEntityClient {
 		inherited_session_key: Option<ResolvedSessionKey>,
 	) -> Result<ParsedEntity, ApiCallError> {
 		let type_model = self.entity_client.resolve_server_type_ref(type_ref)?;
+		// Group-key attributes use their instance owner and ciphertext key version.
+		if has_kdf_nonce(&type_model, &parsed_entity) {
+			return self
+				.process_entity_with_group_keys(&type_model, parsed_entity, inherited_session_key)
+				.await;
+		}
 		if !type_model.marked_encrypted() {
 			return Ok(parsed_entity);
 		}
@@ -539,6 +557,7 @@ mod tests {
 	use crate::crypto::{TutaCryptKeyPairs, X25519PublicKey};
 	use crate::crypto_entity_client::CryptoEntityClient;
 	use crate::date::DateTime;
+	use crate::element_value::ElementValue;
 	use crate::entities::entity_facade::{EntityFacadeImpl, MockEntityFacade, ID_FIELD};
 	use crate::entities::generated::sys::{AccountingInfo, BucketKey};
 	use crate::entities::generated::tutanota::{Mail, MailSetEntry};
@@ -551,7 +570,9 @@ mod tests {
 	};
 	use crate::type_model_provider::TypeModelProvider;
 	use crate::util::entity_test_utils::generate_email_entity;
-	use crate::util::test_utils::{create_test_entity_dict, leak, mock_type_model_provider};
+	use crate::util::test_utils::{
+		create_test_entity, create_test_entity_dict, leak, mock_type_model_provider,
+	};
 	use crate::{GeneratedId, IdTupleGenerated};
 	use crypto_primitives::aes::{Aes256Key, InitializationVector};
 	use crypto_primitives::key::GenericAesKey;
@@ -1619,5 +1640,180 @@ mod tests {
 			Some(EncryptionAuthStatus::RsaDespiteTutacrypt as i64),
 			result.encryptionAuthStatus
 		)
+	}
+
+	#[tokio::test]
+	async fn an_aead_mail_is_loaded_with_its_bucket_key_and_authenticated() {
+		let sk = GenericAesKey::Aes256(Aes256Key::from_bytes(&random::<[u8; 32]>()).unwrap());
+		let iv = InitializationVector::from_bytes(&random::<[u8; 16]>()).unwrap();
+		let recipient_group = GeneratedId::test_random();
+		let bucket_key = BucketKey {
+			_id: None,
+			groupEncBucketKey: None,
+			protocolVersion: CryptoProtocolVersion::TutaCrypt as i64,
+			pubEncBucketKey: Some(vec![9, 8, 7]),
+			recipientKeyVersion: 2,
+			senderKeyVersion: None,
+			bucketEncSessionKeys: vec![],
+			keyGroup: Some(recipient_group.clone()),
+		};
+		let (mut encrypted_mail, ..) = generate_email_entity(
+			&sk,
+			&iv,
+			true,
+			"Subject".to_owned(),
+			"Sender".to_owned(),
+			"Recipient".to_owned(),
+			Some(bucket_key),
+		);
+		// A KDF nonce sends the mail down the AEAD path.
+		encrypted_mail.insert("1839".to_owned(), ElementValue::Bytes(vec![0x22; 32]));
+		let type_model_provider: &'static TypeModelProvider = leak(TypeModelProvider::new_test(
+			Arc::new(MockRestClient::new()),
+			Arc::new(MockFileClient::new()),
+			"localhost:9000".to_string(),
+		));
+		let mail_type_model = type_model_provider
+			.resolve_server_type_ref(&Mail::type_ref())
+			.expect("Error in type_model_provider");
+		let raw_mail_id = encrypted_mail
+			.get(
+				&mail_type_model
+					.get_attribute_id_by_attribute_name(ID_FIELD)
+					.unwrap(),
+			)
+			.unwrap()
+			.assert_tuple_id_generated();
+		let mail_id =
+			IdTupleGenerated::new(raw_mail_id.list_id.clone(), raw_mail_id.element_id.clone());
+		let mut mock_entity_client = MockEntityClient::default();
+		mock_entity_client
+			.expect_resolve_server_type_ref()
+			.returning(move |type_ref| {
+				Ok(type_model_provider
+					.resolve_server_type_ref(type_ref)
+					.unwrap())
+			});
+		mock_entity_client
+			.expect_load()
+			.returning(move |_, _: &IdTupleGenerated| Ok(encrypted_mail.clone()));
+		let mut mock_crypto_facade = MockCryptoFacade::default();
+		mock_crypto_facade
+			.expect_resolve_session_key()
+			.times(1)
+			.returning(move |_, _| {
+				Ok(Some(ResolvedSessionKey {
+					session_key: sk.clone(),
+					owner_enc_session_key: vec![1, 2, 3],
+					owner_key_version: 0u64,
+					sender_identity_pub_key: None,
+				}))
+			});
+		let mut key_loader_facade = MockKeyLoaderFacade::default();
+		key_loader_facade
+			.expect_load_current_key_pair()
+			.with(eq(recipient_group))
+			.returning(|_| {
+				Ok(Versioned {
+					object: AsymmetricKeyPair::RSAKeyPair(RSAKeyPair::generate(
+						&make_thread_rng_facade(),
+					)),
+					version: 0,
+				})
+			});
+		let type_model_provider = Arc::new(mock_type_model_provider());
+		let crypto_entity_client = CryptoEntityClient::new(
+			Arc::new(mock_entity_client),
+			Arc::new(EntityFacadeImpl::new(
+				Arc::clone(&type_model_provider),
+				RandomizerFacade::from_core(rand_core::OsRng),
+			)),
+			Arc::new(mock_crypto_facade),
+			Arc::new(InstanceMapper::new(type_model_provider)),
+			Arc::new(MockAsymmetricCryptoFacade::default()),
+			Arc::new(key_loader_facade),
+		);
+
+		let result: Mail = crypto_entity_client.load(&mail_id).await.unwrap();
+
+		assert_eq!("Subject", result.subject);
+		assert_eq!(
+			Some(EncryptionAuthStatus::RSANoAuthentication as i64),
+			result.encryptionAuthStatus
+		);
+	}
+
+	#[tokio::test]
+	async fn aead_instances_are_not_updated() {
+		let type_model_provider: &'static TypeModelProvider = leak(TypeModelProvider::new_test(
+			Arc::new(MockRestClient::new()),
+			Arc::new(MockFileClient::new()),
+			"localhost:9000".to_string(),
+		));
+		let mut mock_entity_client = MockEntityClient::default();
+		mock_entity_client
+			.expect_resolve_client_type_ref()
+			.returning(move |type_ref| {
+				Ok(type_model_provider
+					.resolve_client_type_ref(type_ref)
+					.unwrap())
+			});
+		mock_entity_client.expect_update_instance().times(0);
+		let crypto_entity_client = CryptoEntityClient::new(
+			Arc::new(mock_entity_client),
+			Arc::new(MockEntityFacade::default()),
+			Arc::new(MockCryptoFacade::default()),
+			Arc::new(InstanceMapper::new(Arc::new(mock_type_model_provider()))),
+			Arc::new(MockAsymmetricCryptoFacade::default()),
+			Arc::new(MockKeyLoaderFacade::default()),
+		);
+		let mail = Mail {
+			_kdfNonce: Some(vec![0x22; 32]),
+			..create_test_entity()
+		};
+
+		let error = crypto_entity_client
+			.update_instance(mail)
+			.await
+			.unwrap_err();
+
+		assert!(error
+			.to_string()
+			.contains("AEAD instance writes are not supported"));
+	}
+
+	#[tokio::test]
+	async fn instances_without_a_kdf_nonce_are_still_updated() {
+		let type_model_provider: &'static TypeModelProvider = leak(TypeModelProvider::new_test(
+			Arc::new(MockRestClient::new()),
+			Arc::new(MockFileClient::new()),
+			"localhost:9000".to_string(),
+		));
+		let mut mock_entity_client = MockEntityClient::default();
+		mock_entity_client
+			.expect_resolve_client_type_ref()
+			.returning(move |type_ref| {
+				Ok(type_model_provider
+					.resolve_client_type_ref(type_ref)
+					.unwrap())
+			});
+		mock_entity_client
+			.expect_update_instance()
+			.withf(|type_ref, _| *type_ref == MailSetEntry::type_ref())
+			.times(1)
+			.returning(|_, _| Ok(()));
+		let crypto_entity_client = CryptoEntityClient::new(
+			Arc::new(mock_entity_client),
+			Arc::new(MockEntityFacade::default()),
+			Arc::new(MockCryptoFacade::default()),
+			Arc::new(InstanceMapper::new(Arc::new(mock_type_model_provider()))),
+			Arc::new(MockAsymmetricCryptoFacade::default()),
+			Arc::new(MockKeyLoaderFacade::default()),
+		);
+
+		crypto_entity_client
+			.update_instance(create_test_entity::<MailSetEntry>())
+			.await
+			.unwrap();
 	}
 }
