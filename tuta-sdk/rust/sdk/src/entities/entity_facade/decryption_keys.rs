@@ -102,6 +102,47 @@ impl EntityDecryptionRequirements {
 	}
 }
 
+/// The id of a parsed list element, when it has one.
+#[must_use]
+pub fn list_element_id(
+	model: &TypeModel,
+	entity: &ParsedEntity,
+) -> Option<crate::IdTupleGenerated> {
+	match model
+		.get_attribute_id_by_attribute_name(super::ID_FIELD)
+		.ok()
+		.and_then(|id| entity.get(&id))
+	{
+		Some(ElementValue::IdTupleGeneratedElementId(id)) => Some(id.clone()),
+		_ => None,
+	}
+}
+
+/// The owner group of a parsed entity, when set.
+#[must_use]
+pub fn owner_group(model: &TypeModel, entity: &ParsedEntity) -> Option<crate::GeneratedId> {
+	match model
+		.get_attribute_id_by_attribute_name(super::OWNER_GROUP_FIELD)
+		.ok()
+		.and_then(|id| entity.get(&id))
+	{
+		Some(ElementValue::IdGeneratedId(group)) => Some(group.clone()),
+		_ => None,
+	}
+}
+
+/// Whether a parsed entity carries an owner-encrypted session key of its own:
+/// any value but null counts, so that an unusable key is tried and refused by
+/// the session key resolution instead of being passed over.
+#[must_use]
+pub fn has_owner_enc_session_key(model: &TypeModel, entity: &ParsedEntity) -> bool {
+	model
+		.get_attribute_id_by_attribute_name(super::OWNER_ENC_SESSION_KEY_FIELD)
+		.ok()
+		.and_then(|id| entity.get(&id))
+		.is_some_and(|value| !matches!(value, ElementValue::Null))
+}
+
 #[must_use]
 pub fn has_kdf_nonce(model: &TypeModel, entity: &ParsedEntity) -> bool {
 	model
@@ -236,5 +277,54 @@ mod tests {
 			.unwrap_err()
 			.to_string()
 			.contains("writes are not supported"));
+	}
+
+	#[test]
+	fn the_parsed_field_accessors_read_ids_group_and_key_presence() {
+		use crate::entities::generated::tutanota::TutanotaFile;
+		use crate::util::test_utils::{create_test_entity, typed_entity_to_parsed_entity};
+		use crate::{GeneratedId, IdTupleGenerated};
+		let provider = TypeModelProvider::new_test(
+			std::sync::Arc::new(crate::bindings::rest_client::MockRestClient::default()),
+			std::sync::Arc::new(crate::bindings::file_client::MockFileClient::default()),
+			"http://localhost:9000".to_string(),
+		);
+		let model = provider
+			.resolve_server_type_ref(&TutanotaFile::type_ref())
+			.unwrap();
+		let id = IdTupleGenerated {
+			list_id: GeneratedId("list".to_owned()),
+			element_id: GeneratedId("element".to_owned()),
+		};
+		let group = GeneratedId("group".to_owned());
+		let mut file = TutanotaFile {
+			_id: Some(id.clone()),
+			_ownerGroup: Some(group.clone()),
+			_ownerEncSessionKey: None,
+			..create_test_entity()
+		};
+
+		let parsed = typed_entity_to_parsed_entity(file.clone());
+		assert_eq!(list_element_id(&model, &parsed), Some(id));
+		assert_eq!(owner_group(&model, &parsed), Some(group));
+		assert!(!has_owner_enc_session_key(&model, &parsed));
+
+		// An empty key is present: it is for the resolution to refuse it.
+		file._ownerEncSessionKey = Some(vec![]);
+		assert!(has_owner_enc_session_key(
+			&model,
+			&typed_entity_to_parsed_entity(file.clone())
+		));
+		file._ownerEncSessionKey = Some(vec![1, 2, 3]);
+		assert!(has_owner_enc_session_key(
+			&model,
+			&typed_entity_to_parsed_entity(file.clone())
+		));
+
+		file._id = None;
+		file._ownerGroup = None;
+		let parsed = typed_entity_to_parsed_entity(file);
+		assert_eq!(list_element_id(&model, &parsed), None);
+		assert_eq!(owner_group(&model, &parsed), None);
 	}
 }

@@ -1,7 +1,10 @@
 mod decryption;
 mod decryption_keys;
 use decryption::InstanceDecryptor;
-pub use decryption_keys::{has_kdf_nonce, EntityDecryptionKeys, EntityDecryptionRequirements};
+pub use decryption_keys::{
+	has_kdf_nonce, has_owner_enc_session_key, list_element_id, owner_group, EntityDecryptionKeys,
+	EntityDecryptionRequirements,
+};
 
 use crate::crypto::crypto_facade::ResolvedSessionKey;
 use crate::date::DateTime;
