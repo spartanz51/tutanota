@@ -130,6 +130,20 @@ impl CryptoEntityClient {
 		self.process_server_response(parsed_entities).await
 	}
 
+	/// Loads and decrypts the list elements with the given ids; see
+	/// `EntityClient::load_multiple`.
+	pub async fn load_multiple<T: Entity + DeserializeOwned>(
+		&self,
+		list_id: &GeneratedId,
+		element_ids: &[GeneratedId],
+	) -> Result<Vec<T>, ApiCallError> {
+		let parsed_entities = self
+			.entity_client
+			.load_multiple(&T::type_ref(), list_id, element_ids)
+			.await?;
+		self.process_server_response(parsed_entities).await
+	}
+
 	pub fn serialize_entity<Instance: Entity + Serialize>(
 		&self,
 		instance: Instance,
