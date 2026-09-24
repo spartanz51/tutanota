@@ -3,7 +3,9 @@ use crate::ApiCallError;
 use crypto_primitives::aead_facade::{AeadFacade, AeadSubKeys};
 use crypto_primitives::key::GenericAesKey;
 use crypto_primitives::randomizer_facade::RandomizerFacade;
-use std::cell::OnceCell;
+use crypto_primitives::versioned::Versioned;
+use std::cell::{OnceCell, RefCell};
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum CipherVersion {
@@ -35,24 +37,55 @@ pub(crate) fn cipher_version(bytes: &[u8]) -> Result<CipherVersion, ApiCallError
 }
 
 pub(super) struct InstanceDecryptor<'a> {
-	session_key: &'a GenericAesKey,
+	session_key: Option<&'a GenericAesKey>,
+	group_keys: Option<&'a HashMap<u64, GenericAesKey>>,
+	kdf_nonce: Option<&'a [u8]>,
+	group_subkeys: RefCell<HashMap<u64, AeadSubKeys>>,
 	instance_type: String,
 	aead: AeadFacade,
 	session_subkeys: OnceCell<AeadSubKeys>,
 }
 
 impl<'a> InstanceDecryptor<'a> {
+	#[cfg(test)]
 	pub(super) fn new(
 		session_key: &'a GenericAesKey,
 		instance_type: String,
 		randomizer: RandomizerFacade,
 	) -> Self {
 		Self {
-			session_key,
+			session_key: Some(session_key),
+			group_keys: None,
+			kdf_nonce: None,
+			group_subkeys: RefCell::new(HashMap::new()),
 			instance_type,
 			aead: AeadFacade::new(randomizer),
 			session_subkeys: OnceCell::new(),
 		}
+	}
+
+	pub(super) fn with_group_keys(
+		session_key: Option<&'a GenericAesKey>,
+		group_keys: &'a HashMap<u64, GenericAesKey>,
+		kdf_nonce: Option<&'a [u8]>,
+		instance_type: String,
+		randomizer: RandomizerFacade,
+	) -> Self {
+		Self {
+			session_key,
+			group_keys: Some(group_keys),
+			kdf_nonce,
+			instance_type,
+			aead: AeadFacade::new(randomizer),
+			session_subkeys: OnceCell::new(),
+			group_subkeys: RefCell::new(HashMap::new()),
+		}
+	}
+
+	fn session_key(&self) -> Result<&GenericAesKey, ApiCallError> {
+		self.session_key.ok_or_else(|| {
+			ApiCallError::internal("Missing session key for encrypted attribute".into())
+		})
 	}
 
 	pub(super) fn decrypt(
@@ -62,11 +95,11 @@ impl<'a> InstanceDecryptor<'a> {
 	) -> Result<Vec<u8>, ApiCallError> {
 		match cipher_version(ciphertext)? {
 			CipherVersion::Legacy => self
-				.session_key
+				.session_key()?
 				.decrypt_data(ciphertext)
 				.map_err(|e| ApiCallError::internal(e.to_string())),
 			CipherVersion::SessionKey => {
-				let GenericAesKey::Aes256(key) = self.session_key else {
+				let GenericAesKey::Aes256(key) = self.session_key()? else {
 					return Err(ApiCallError::internal(
 						"AEAD session keys must be 256 bits".into(),
 					));
@@ -85,9 +118,41 @@ impl<'a> InstanceDecryptor<'a> {
 					)
 					.map_err(|e| ApiCallError::internal(format!("AEAD session attribute: {e}")))
 			},
-			CipherVersion::GroupKey(_) => Err(ApiCallError::internal(
-				"AEAD group key context is required".into(),
-			)),
+			CipherVersion::GroupKey(version) => {
+				let key = self
+					.group_keys
+					.and_then(|keys| keys.get(&version))
+					.ok_or_else(|| {
+						ApiCallError::internal(format!("Missing AEAD group key version {version}"))
+					})?;
+				let nonce = self
+					.kdf_nonce
+					.filter(|nonce| nonce.len() == 32)
+					.ok_or_else(|| {
+						ApiCallError::internal("Missing or invalid AEAD KDF nonce".into())
+					})?;
+				let path = field_path.ok_or_else(|| {
+					ApiCallError::internal("Missing aggregate ID for AEAD field path".into())
+				})?;
+				let mut cache = self.group_subkeys.borrow_mut();
+				let keys = cache.entry(version).or_insert_with(|| {
+					AeadSubKeys::derive_from_group_key(
+						&Versioned {
+							object: key.clone(),
+							version,
+						},
+						nonce,
+						&self.instance_type,
+					)
+				});
+				self.aead
+					.decrypt(
+						keys,
+						ciphertext,
+						format!("attributeEncGK\u{001f}{path}").as_bytes(),
+					)
+					.map_err(|e| ApiCallError::internal(format!("AEAD group attribute: {e}")))
+			},
 		}
 	}
 }
@@ -181,5 +246,125 @@ mod tests {
 		for len in [1, 3, 17, 31, 49] {
 			assert!(decryptor.decrypt(&vec![3; len], Some("105")).is_err());
 		}
+	}
+	#[test]
+	fn values_under_the_session_key_need_one() {
+		let keys = HashMap::new();
+		let nonce = [0x22; 32];
+		let decryptor = InstanceDecryptor::with_group_keys(
+			None,
+			&keys,
+			Some(&nonce),
+			"tutanota/97".into(),
+			RandomizerFacade::from_core(rand_core::OsRng),
+		);
+		for ciphertext in [vec![1; 32], vec![3; 53]] {
+			assert!(decryptor
+				.decrypt(&ciphertext, Some("105"))
+				.unwrap_err()
+				.to_string()
+				.contains("Missing session key"));
+		}
+	}
+
+	#[test]
+	fn group_vectors_require_the_correct_nonce_version_and_key() {
+		let vectors: Vec<Value> =
+			serde_json::from_str(include_str!("../../../test_data/aead_attributes_ts.json"))
+				.unwrap();
+		for vector in vectors.iter().filter(|v| v["version"] == 2) {
+			let key = GenericAesKey::from_bytes(
+				&BASE64_STANDARD
+					.decode(vector["key"].as_str().unwrap())
+					.unwrap(),
+			)
+			.unwrap();
+			let ciphertext = BASE64_STANDARD
+				.decode(vector["ciphertext"].as_str().unwrap())
+				.unwrap();
+			let nonce = BASE64_STANDARD
+				.decode(vector["kdf_nonce"].as_str().unwrap())
+				.unwrap();
+			let keys = HashMap::from([(7, key.clone())]);
+			let make = |nonce| {
+				InstanceDecryptor::with_group_keys(
+					None,
+					&keys,
+					nonce,
+					"tutanota/97".into(),
+					RandomizerFacade::from_core(rand_core::OsRng),
+				)
+			};
+			let decryptor = make(Some(nonce.as_slice()));
+			assert_eq!(
+				decryptor
+					.decrypt(&ciphertext, vector["path"].as_str())
+					.unwrap(),
+				vector["plaintext"].as_str().unwrap().as_bytes()
+			);
+			assert!(decryptor.decrypt(&ciphertext, None).is_err());
+			assert!(make(None)
+				.decrypt(&ciphertext, vector["path"].as_str())
+				.is_err());
+			let wrong_nonce = [0x33; 32];
+			assert!(make(Some(&wrong_nonce))
+				.decrypt(&ciphertext, vector["path"].as_str())
+				.is_err());
+			let wrong_keys = HashMap::from([(8, key)]);
+			let decryptor = InstanceDecryptor::with_group_keys(
+				None,
+				&wrong_keys,
+				Some(&nonce),
+				"tutanota/97".into(),
+				RandomizerFacade::from_core(rand_core::OsRng),
+			);
+			assert!(decryptor
+				.decrypt(&ciphertext, vector["path"].as_str())
+				.is_err());
+		}
+	}
+
+	#[test]
+	fn mixed_versions_share_context_without_reusing_the_wrong_subkeys() {
+		let session = GenericAesKey::from_bytes(&[0x11; 32]).unwrap();
+		let keys = HashMap::from([
+			(7, GenericAesKey::from_bytes(&[0x44; 32]).unwrap()),
+			(8, GenericAesKey::from_bytes(&[0x55; 32]).unwrap()),
+		]);
+		let nonce = [0x22; 32];
+		let decryptor = InstanceDecryptor::with_group_keys(
+			Some(&session),
+			&keys,
+			Some(&nonce),
+			"tutanota/97".into(),
+			RandomizerFacade::from_core(rand_core::OsRng),
+		);
+		let facade = AeadFacade::new(RandomizerFacade::from_core(rand_core::OsRng));
+		for version in [7, 8, 7] {
+			let subkeys = AeadSubKeys::derive_from_group_key(
+				&Versioned {
+					object: keys[&version].clone(),
+					version,
+				},
+				&nonce,
+				"tutanota/97",
+			);
+			let ct = facade
+				.encrypt(&subkeys, b"group".to_vec(), b"attributeEncGK\x1f105")
+				.unwrap();
+			assert_eq!(decryptor.decrypt(&ct, Some("105")).unwrap(), b"group");
+		}
+		assert_eq!(decryptor.group_subkeys.borrow().len(), 2);
+		let vectors: Vec<Value> =
+			serde_json::from_str(include_str!("../../../test_data/aead_attributes_ts.json"))
+				.unwrap();
+		let v = vectors.iter().find(|v| v["version"] == 3).unwrap();
+		let ct = BASE64_STANDARD
+			.decode(v["ciphertext"].as_str().unwrap())
+			.unwrap();
+		assert_eq!(
+			decryptor.decrypt(&ct, v["path"].as_str()).unwrap(),
+			v["plaintext"].as_str().unwrap().as_bytes()
+		);
 	}
 }

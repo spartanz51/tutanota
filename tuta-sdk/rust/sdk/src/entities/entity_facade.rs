@@ -1,5 +1,7 @@
 mod decryption;
+mod decryption_keys;
 use decryption::InstanceDecryptor;
+pub use decryption_keys::{has_kdf_nonce, EntityDecryptionKeys, EntityDecryptionRequirements};
 
 use crate::crypto::crypto_facade::ResolvedSessionKey;
 use crate::date::DateTime;
@@ -63,6 +65,13 @@ pub trait EntityFacade: Send + Sync {
 		type_model: &TypeModel,
 		entity: ParsedEntity,
 		resolved_session_key: ResolvedSessionKey,
+	) -> Result<ParsedEntity, ApiCallError>;
+
+	fn decrypt_and_map_with_keys(
+		&self,
+		type_model: &TypeModel,
+		entity: ParsedEntity,
+		keys: EntityDecryptionKeys,
 	) -> Result<ParsedEntity, ApiCallError>;
 
 	fn encrypt_and_map(
@@ -556,13 +565,36 @@ impl EntityFacade for EntityFacadeImpl {
 		entity: ParsedEntity,
 		resolved_session_key: ResolvedSessionKey,
 	) -> Result<ParsedEntity, ApiCallError> {
-		let decryptor = InstanceDecryptor::new(
-			&resolved_session_key.session_key,
+		self.decrypt_and_map_with_keys(
+			type_model,
+			entity,
+			EntityDecryptionKeys {
+				session_key: Some(resolved_session_key),
+				group_keys: Default::default(),
+			},
+		)
+	}
+
+	fn decrypt_and_map_with_keys(
+		&self,
+		type_model: &TypeModel,
+		entity: ParsedEntity,
+		keys: EntityDecryptionKeys,
+	) -> Result<ParsedEntity, ApiCallError> {
+		let nonce = decryption_keys::kdf_nonce(type_model, &entity)?.map(<[u8]>::to_vec);
+		let decryptor = InstanceDecryptor::with_group_keys(
+			keys.session_key.as_ref().map(|key| &key.session_key),
+			&keys.group_keys,
+			nonce.as_deref(),
 			format!("{}/{}", type_model.app, String::from(type_model.id)),
 			self.randomizer_facade.clone(),
 		);
+		// The nonce is metadata. Own it so the parsed instance can be moved into traversal.
 		let mut mapped_decrypted =
 			self.decrypt_and_map_inner(type_model, entity, &decryptor, Some(""))?;
+		let Some(resolved_session_key) = keys.session_key.as_ref() else {
+			return Ok(mapped_decrypted);
+		};
 
 		let owner_enc_session_key_attribute_id: String = type_model
             .get_attribute_id_by_attribute_name(OWNER_ENC_SESSION_KEY_FIELD)
@@ -602,6 +634,11 @@ impl EntityFacade for EntityFacadeImpl {
 		instance: &ParsedEntity,
 		sk: &GenericAesKey,
 	) -> Result<ParsedEntity, ApiCallError> {
+		if has_kdf_nonce(type_model, instance) {
+			return Err(ApiCallError::internal(
+				"AEAD instance writes are not supported".into(),
+			));
+		}
 		self.encrypt_and_map_inner(type_model, instance, sk)
 	}
 }
