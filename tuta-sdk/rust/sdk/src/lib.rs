@@ -15,7 +15,6 @@ use crate::blobs::blob_access_token_facade::BlobAccessTokenFacade;
 use crate::blobs::blob_facade::BlobFacade;
 #[cfg_attr(test, mockall_double::double)]
 use crate::crypto::asymmetric_crypto_facade::AsymmetricCryptoFacade;
-use crate::crypto::crypto_facade::create_auth_verifier;
 #[cfg_attr(test, mockall_double::double)]
 use crate::crypto::crypto_facade::CryptoFacade;
 #[cfg_attr(test, mockall_double::double)]
@@ -25,7 +24,7 @@ use crate::crypto_entity_client::CryptoEntityClient;
 use crate::date::date_provider::SystemDateProvider;
 use crate::element_value::{ElementValue, ParsedEntity};
 use crate::entities::entity_facade::{EntityFacade, EntityFacadeImpl};
-use crate::entities::generated::sys::{CreateSessionData, SaltData, User};
+use crate::entities::generated::sys::User;
 use crate::entities::generated::tutanota::Mail;
 #[cfg_attr(test, mockall_double::double)]
 use crate::entity_client::EntityClient;
@@ -35,13 +34,12 @@ use crate::json_serializer::{InstanceMapperError, JsonSerializer};
 use crate::key_cache::KeyCache;
 #[cfg_attr(test, mockall_double::double)]
 use crate::key_loader_facade::KeyLoaderFacade;
-use crate::login::login_facade::{derive_user_passphrase_key, KdfType};
-use crate::login::{CredentialType, Credentials, LoginError, LoginFacade};
+use crate::login::{Credentials, LoginError, LoginFacade};
 use crate::mail_facade::MailFacade;
 use crate::rest_error::{HttpError, ParseFailureError};
-use crate::services::generated::sys::{SaltService, SessionService};
 #[cfg_attr(test, mockall_double::double)]
 use crate::services::service_executor::{ResolvingServiceExecutor, ServiceExecutor};
+#[cfg(test)]
 use crate::services::ExtraServiceParams;
 use crate::type_model_provider::TypeModelProvider;
 #[cfg_attr(test, mockall_double::double)]
@@ -50,7 +48,6 @@ use crate::typed_entity_client::TypedEntityClient;
 use crate::user_facade::UserFacade;
 use bindings::file_client::FileClient;
 use bindings::rest_client::{RestClient, RestClientError};
-use crypto_primitives::aes::{Aes256Key, InitializationVector};
 use crypto_primitives::key::GenericAesKey;
 use crypto_primitives::randomizer_facade::RandomizerFacade;
 use crypto_primitives::versioned::VersionedAesKey;
@@ -335,81 +332,17 @@ impl Sdk {
 		mail_address: &str,
 		passphrase: &str,
 	) -> Result<Arc<LoggedInSdk>, LoginError> {
-		// Like the TS LoginFacade: the salt and the session are keyed by the
-		// normalized address.
-		let mail_address = mail_address.trim().to_lowercase();
-		let mail_address = mail_address.as_str();
-		let headers_provider = Arc::new(HeadersProvider::new(None));
-		let entity_facade = Arc::new(EntityFacadeImpl::new(
-			self.type_model_provider.clone(),
-			RandomizerFacade::from_core(rand_core::OsRng),
-		));
-
-		let service_executor = ServiceExecutor::new(
-			headers_provider.clone(),
-			None,
-			entity_facade,
-			self.instance_mapper.clone(),
-			self.json_serializer.clone(),
-			self.rest_client.clone(),
-			self.type_model_provider.clone(),
-			self.base_url.to_string(),
-		);
-		let salt_get_input: SaltData = SaltData {
-			_format: 0,
-			mailAddress: mail_address.to_string(),
-		};
-		let salt_return = service_executor
-			.get::<SaltService>(salt_get_input, ExtraServiceParams::default())
+		let response = self
+			.initiate_session(mail_address, passphrase, "Linux Desktop")
 			.await?;
-
-		// Only Argon2id is implemented; deriving it for a Bcrypt account would
-		// send a wrong verifier and fail as a misleading authentication error.
-		if !matches!(
-			KdfType::try_from(salt_return.kdfVersion)?,
-			KdfType::Argon2id
-		) {
-			return Err(LoginError::InvalidKey {
-				error_message: "unsupported password KDF".to_string(),
+		if !response.challenges.is_empty() {
+			return Err(LoginError::ApiCall {
+				source: ApiCallError::internal(
+					"second factor authentication required: use initiate_session, authenticate_with_second_factor_totp, then login".to_string(),
+				),
 			});
 		}
-
-		let Ok(salt) = salt_return.salt.try_into() else {
-			return Err(LoginError::InvalidKey {
-				error_message: "salt has wrong length".to_string(),
-			});
-		};
-
-		let randomizer = RandomizerFacade::from_core(rand_core::OsRng);
-		let access_key = Aes256Key::generate(&randomizer);
-		let user_passphrase_key = derive_user_passphrase_key(KdfType::Argon2id, passphrase, salt);
-		let auth_verifier = create_auth_verifier(user_passphrase_key.clone());
-		let session_data: CreateSessionData = CreateSessionData {
-			_format: 0,
-			accessKey: Some(access_key.as_bytes().to_vec()),
-			authToken: None,
-			authVerifier: Some(auth_verifier),
-			clientIdentifier: "Linux Desktop".to_string(),
-			mailAddress: Some(mail_address.to_string()),
-			recoverCodeVerifier: None,
-			user: None,
-		};
-		let encrypted_passphrase_key = GenericAesKey::Aes256(access_key).encrypt_key(
-			&GenericAesKey::Aes256(user_passphrase_key),
-			InitializationVector::generate(&randomizer),
-		);
-		let session_data_response = service_executor
-			.post::<SessionService>(session_data, ExtraServiceParams::default())
-			.await?;
-
-		self.login(Credentials {
-			login: mail_address.to_string(),
-			user_id: session_data_response.user.clone(),
-			access_token: session_data_response.accessToken.clone(),
-			encrypted_passphrase_key,
-			credential_type: CredentialType::Internal,
-		})
-		.await
+		self.login(response.credentials).await
 	}
 
 	#[must_use]
