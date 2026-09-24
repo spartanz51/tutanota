@@ -1,3 +1,5 @@
+mod aead;
+
 use std::sync::Arc;
 
 use crate::bindings::rest_client::RestClientError;
@@ -191,6 +193,11 @@ impl CryptoEntityClient {
 			.map_err(|e| ApiCallError::internal_with_err(e, type_ref.to_string().as_str()))?;
 		let type_model = self.entity_client.resolve_client_type_ref(&type_ref)?;
 
+		if crate::entities::entity_facade::has_kdf_nonce(type_model, &parsed_entity) {
+			return Err(ApiCallError::internal(
+				"AEAD instance writes are not supported".into(),
+			));
+		}
 		let parsed_instance = if type_model.is_encrypted() {
 			let session_key = self
 				.crypto_facade
@@ -254,6 +261,11 @@ impl CryptoEntityClient {
 		type_model: &TypeModel,
 		parsed_entity: ParsedEntity,
 	) -> Result<ParsedEntity, ApiCallError> {
+		if crate::entities::entity_facade::has_kdf_nonce(type_model, &parsed_entity) {
+			return self
+				.process_entity_with_group_keys(type_model, parsed_entity, None)
+				.await;
+		}
 		let possible_session_key = self
 			.crypto_facade
 			.resolve_session_key(&parsed_entity, type_model)
@@ -303,6 +315,12 @@ impl CryptoEntityClient {
 		inherited_session_key: Option<ResolvedSessionKey>,
 	) -> Result<ParsedEntity, ApiCallError> {
 		let type_model = self.entity_client.resolve_server_type_ref(type_ref)?;
+		// Group-key attributes use their instance owner and ciphertext key version.
+		if crate::entities::entity_facade::has_kdf_nonce(&type_model, &parsed_entity) {
+			return self
+				.process_entity_with_group_keys(&type_model, parsed_entity, inherited_session_key)
+				.await;
+		}
 		if !type_model.marked_encrypted() {
 			return Ok(parsed_entity);
 		}
